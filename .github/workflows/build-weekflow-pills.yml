@@ -50,13 +50,13 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --no-install --clean
 
-      - name: Build test APK
+      - name: Build standalone release APK
         working-directory: android
         env:
           NODE_ENV: production
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
       - name: Prepare APK
         shell: bash
@@ -64,15 +64,15 @@ jobs:
           set -euo pipefail
           VERSION="$(node -p "require('./app.json').expo.version")"
           mkdir -p output
-          APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          APK="$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
           test -n "$APK"
-          cp "$APK" "output/WeekFlow-Pills-v${VERSION}-Test.apk"
+          cp "$APK" "output/WeekFlow-Pills-v${VERSION}-Standalone.apk"
           ls -lh output/
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WeekFlow-Pills-Test-APK
-          path: output/WeekFlow-Pills-v*-Test.apk
+          name: WeekFlow-Pills-Standalone-APK
+          path: output/WeekFlow-Pills-v*-Standalone.apk
           if-no-files-found: error
           retention-days: 7
