@@ -1,0 +1,78 @@
+name: Build WeekFlow Pills Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "app/**"
+      - "src/**"
+      - "app.json"
+      - "package.json"
+      - "tsconfig.json"
+      - ".github/workflows/build-weekflow-pills.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.13'
+          package-manager-cache: false
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run quality
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Build test APK
+        working-directory: android
+        env:
+          NODE_ENV: production
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Prepare APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./app.json').expo.version")"
+          mkdir -p output
+          APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          cp "$APK" "output/WeekFlow-Pills-v${VERSION}-Test.apk"
+          ls -lh output/
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeekFlow-Pills-Test-APK
+          path: output/WeekFlow-Pills-v*-Test.apk
+          if-no-files-found: error
+          retention-days: 7
