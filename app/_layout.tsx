@@ -2,10 +2,11 @@ import { useEffect } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
 import { BottomNav } from '@/src/components/BottomNav';
 import { ensureDatabase } from '@/src/data/medications';
 import { useAdaptiveLayout } from '@/src/presentation/layout/useAdaptiveLayout';
-import { syncMedicationNotifications } from '@/src/services/notifications';
+import { handleMedicationNotificationResponse, syncMedicationNotifications } from '@/src/services/notifications';
 import { colors } from '@/src/theme/colors';
 
 export default function RootLayout() {
@@ -13,16 +14,34 @@ export default function RootLayout() {
 
   useEffect(() => {
     ensureDatabase();
+
     void syncMedicationNotifications().catch((error) => {
       console.warn('No se pudieron sincronizar los recordatorios', error);
     });
 
-    const subscription = AppState.addEventListener('change', (state) => {
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      void handleMedicationNotificationResponse(response).catch((error) => {
+        console.warn('No se pudo procesar la acción del recordatorio', error);
+      });
+    });
+
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (!response) return;
+        return handleMedicationNotificationResponse(response);
+      })
+      .catch(() => undefined);
+
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         void syncMedicationNotifications().catch(() => undefined);
       }
     });
-    return () => subscription.remove();
+
+    return () => {
+      responseSubscription.remove();
+      appStateSubscription.remove();
+    };
   }, []);
 
   return (

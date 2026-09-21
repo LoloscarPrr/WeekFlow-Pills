@@ -50,10 +50,76 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --no-install --clean
 
+      - name: Detect permanent signing secrets
+        id: signing
+        shell: bash
+        env:
+          PILLS_KEYSTORE_BASE64: ${{ secrets.PILLS_KEYSTORE_BASE64 }}
+          PILLS_KEYSTORE_PASSWORD: ${{ secrets.PILLS_KEYSTORE_PASSWORD }}
+          PILLS_KEY_ALIAS: ${{ secrets.PILLS_KEY_ALIAS }}
+          PILLS_KEY_PASSWORD: ${{ secrets.PILLS_KEY_PASSWORD }}
+        run: |
+          if [ -n "$PILLS_KEYSTORE_BASE64" ] && [ -n "$PILLS_KEYSTORE_PASSWORD" ] && [ -n "$PILLS_KEY_ALIAS" ] && [ -n "$PILLS_KEY_PASSWORD" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Permanent WeekFlow Pills signing secrets are not configured yet. Building with the generated test signing key."
+          fi
+
+      - name: Restore permanent WeekFlow Pills signing key
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        env:
+          PILLS_KEYSTORE_BASE64: ${{ secrets.PILLS_KEYSTORE_BASE64 }}
+          PILLS_KEYSTORE_PASSWORD: ${{ secrets.PILLS_KEYSTORE_PASSWORD }}
+          PILLS_KEY_ALIAS: ${{ secrets.PILLS_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$PILLS_KEYSTORE_BASE64" | base64 --decode > android/app/weekflow-pills-release.jks
+          chmod 600 android/app/weekflow-pills-release.jks
+          keytool -list -keystore android/app/weekflow-pills-release.jks -storepass "$PILLS_KEYSTORE_PASSWORD" -alias "$PILLS_KEY_ALIAS" >/dev/null
+
+      - name: Configure permanent release signing
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'android/app/build.gradle';
+          const source = fs.readFileSync(path, 'utf8');
+          const signingMarker = '    signingConfigs {';
+          const buildTypesMarker = '    buildTypes {';
+          const signingStart = source.indexOf(signingMarker);
+          const buildTypesStart = source.indexOf(buildTypesMarker);
+          if (signingStart < 0 || buildTypesStart < 0) throw new Error('Could not locate Android signing blocks.');
+
+          const signingBlock = `
+        release {
+            storeFile file(System.getenv("PILLS_KEYSTORE_PATH"))
+            storePassword System.getenv("PILLS_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("PILLS_KEY_ALIAS")
+            keyPassword System.getenv("PILLS_KEY_PASSWORD")
+        }
+`;
+          let output = source.slice(0, buildTypesStart) + signingBlock + source.slice(buildTypesStart);
+          output = output.replace(
+            /release \{([\s\S]*?)signingConfig signingConfigs\.debug/,
+            (match, body) => `release {${body}signingConfig signingConfigs.release`,
+          );
+          if (!output.includes('signingConfig signingConfigs.release')) {
+            throw new Error('Could not switch release build to permanent signing.');
+          }
+          fs.writeFileSync(path, output);
+          NODE
+
       - name: Build standalone release APK
         working-directory: android
         env:
           NODE_ENV: production
+          PILLS_KEYSTORE_PATH: ${{ github.workspace }}/android/app/weekflow-pills-release.jks
+          PILLS_KEYSTORE_PASSWORD: ${{ secrets.PILLS_KEYSTORE_PASSWORD }}
+          PILLS_KEY_ALIAS: ${{ secrets.PILLS_KEY_ALIAS }}
+          PILLS_KEY_PASSWORD: ${{ secrets.PILLS_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
@@ -72,7 +138,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WeekFlow-Pills-Standalone-APK
+          name: WeekFlow-Pills-v${{ steps.signing.outputs.enabled == 'true' && 'Permanent-Signed' || 'Test-Signed' }}-APK
           path: output/WeekFlow-Pills-v*-Standalone.apk
           if-no-files-found: error
           retention-days: 7

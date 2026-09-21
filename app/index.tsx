@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { DoseOccurrence, IntakeStatus } from '@/src/domain/medication';
-import { listTodayDoses, recordIntake } from '@/src/data/medications';
+import { listLastTakenByMedication, listTodayDoses, recordIntake, type LastTaken } from '@/src/data/medications';
 import { colors } from '@/src/theme/colors';
 
 function minutesOf(time: string) {
@@ -10,13 +10,34 @@ function minutesOf(time: string) {
   return hour * 60 + minute;
 }
 
+function formatRecordedTime(iso: string) {
+  const date = new Date(iso);
+  return date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+}
+
+function lastTakenLabel(last: LastTaken | undefined) {
+  if (!last) return 'Sin tomas registradas todavía';
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const prefix = last.scheduledDate === todayKey ? 'Hoy' : last.scheduledDate;
+  return `Última toma: ${prefix} · ${formatRecordedTime(last.recordedAt)}`;
+}
+
 export default function TodayScreen() {
   const [doses, setDoses] = useState<DoseOccurrence[]>([]);
+  const [lastTaken, setLastTaken] = useState<Record<number, LastTaken>>({});
 
-  const refresh = () => setDoses(listTodayDoses());
+  const refresh = () => {
+    setDoses(listTodayDoses());
+    setLastTaken(listLastTakenByMedication());
+  };
 
   useEffect(() => {
     refresh();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refresh();
+    });
+    return () => subscription.remove();
   }, []);
 
   const nextDose = useMemo(() => {
@@ -27,9 +48,58 @@ export default function TodayScreen() {
     return pending.find((item) => minutesOf(item.scheduledTime) >= nowMinutes) ?? pending[0];
   }, [doses]);
 
-  const save = (dose: DoseOccurrence, status: IntakeStatus) => {
-    recordIntake(dose, status);
+  const commitStatus = (dose: DoseOccurrence, status: IntakeStatus) => {
+    const result = recordIntake(dose, status);
     refresh();
+
+    if (result === 'unchanged') {
+      Alert.alert(
+        status === 'taken' ? 'Ya estaba registrado' : 'Ya estaba omitido',
+        'No se creó un registro duplicado.',
+      );
+    }
+  };
+
+  const save = (dose: DoseOccurrence, status: IntakeStatus) => {
+    if (dose.status === status) {
+      commitStatus(dose, status);
+      return;
+    }
+
+    if (dose.status && dose.status !== status) {
+      Alert.alert(
+        'Corregir registro',
+        dose.status === 'taken'
+          ? 'Esta toma figura como tomada. ¿Quieres cambiarla a omitida?'
+          : 'Esta toma figura como omitida. ¿Quieres cambiarla a tomada?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Sí, corregir', onPress: () => commitStatus(dose, status) },
+        ],
+      );
+      return;
+    }
+
+    if (status === 'taken') {
+      Alert.alert(
+        'Confirmar toma',
+        `¿Confirmas que se tomó ${dose.medication.name} · ${dose.medication.dose}?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Sí, registrar', onPress: () => commitStatus(dose, status) },
+        ],
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Marcar como omitido',
+      'Esto solo registra el estado. La app no indica si corresponde tomar una dosis más tarde.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Registrar omitido', onPress: () => commitStatus(dose, status) },
+      ],
+    );
   };
 
   return (
@@ -40,7 +110,7 @@ export default function TodayScreen() {
             <Text style={styles.brand}>WeekFlow</Text>
             <Text style={styles.brandSub}>PILLS</Text>
           </View>
-          <View style={styles.version}><Text style={styles.versionText}>Alpha 0.1.0</Text></View>
+          <View style={styles.version}><Text style={styles.versionText}>Alpha 0.2.0</Text></View>
         </View>
 
         <View style={styles.hero}>
@@ -56,6 +126,7 @@ export default function TodayScreen() {
               <Text style={styles.nextTime}>{nextDose.scheduledTime}</Text>
               <Text style={styles.nextName}>{nextDose.medication.name}</Text>
               <Text style={styles.nextDose}>{nextDose.medication.dose}</Text>
+              <Text style={styles.lastTaken}>{lastTakenLabel(lastTaken[nextDose.medication.id])}</Text>
               {nextDose.medication.instructions ? (
                 <Text style={styles.nextInstructions}>{nextDose.medication.instructions}</Text>
               ) : null}
@@ -83,6 +154,10 @@ export default function TodayScreen() {
             </View>
             <Text style={styles.medName}>{item.medication.name}</Text>
             <Text style={styles.medDose}>{item.medication.dose}</Text>
+            <Text style={styles.lastDoseLine}>{lastTakenLabel(lastTaken[item.medication.id])}</Text>
+            {item.status === 'taken' && item.recordedAt ? (
+              <Text style={styles.recordedLine}>Esta toma se registró a las {formatRecordedTime(item.recordedAt)}</Text>
+            ) : null}
             {item.medication.instructions ? <Text style={styles.instructions}>{item.medication.instructions}</Text> : null}
 
             {item.medication.stock !== null && item.medication.stock <= item.medication.lowStockThreshold ? (
@@ -90,11 +165,14 @@ export default function TodayScreen() {
             ) : null}
 
             <View style={styles.actions}>
-              <Pressable style={[styles.action, styles.takenButton]} onPress={() => save(item, 'taken')}>
-                <Text style={styles.takenButtonText}>✓ Tomado</Text>
+              <Pressable
+                style={[styles.action, styles.takenButton, item.status === 'taken' && styles.takenButtonDone]}
+                onPress={() => save(item, 'taken')}
+              >
+                <Text style={styles.takenButtonText}>{item.status === 'taken' ? '✓ Registrado' : '✓ Tomado'}</Text>
               </Pressable>
               <Pressable style={styles.action} onPress={() => save(item, 'skipped')}>
-                <Text style={styles.skipButtonText}>Omitir</Text>
+                <Text style={styles.skipButtonText}>{item.status === 'skipped' ? 'Omitido ✓' : 'Omitir'}</Text>
               </Pressable>
             </View>
           </View>
@@ -131,6 +209,7 @@ const styles = StyleSheet.create({
   nextTime: { color: colors.text, fontSize: 42, lineHeight: 49, fontWeight: '900', marginTop: 10 },
   nextName: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 2 },
   nextDose: { color: '#A9CFFF', fontSize: 15, fontWeight: '800', marginTop: 4 },
+  lastTaken: { color: '#7DE1C1', fontSize: 12, fontWeight: '800', marginTop: 10 },
   nextInstructions: { color: '#C2D0E3', fontSize: 13, lineHeight: 19, marginTop: 10 },
   doneTitle: { color: colors.text, fontSize: 22, fontWeight: '900', marginTop: 14 },
   doneCopy: { color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 6 },
@@ -146,11 +225,14 @@ const styles = StyleSheet.create({
   statusSkippedText: { color: '#FF9AA4' },
   medName: { color: colors.text, fontSize: 19, fontWeight: '900', marginTop: 13 },
   medDose: { color: '#B8C9E0', fontSize: 14, fontWeight: '800', marginTop: 3 },
+  lastDoseLine: { color: '#8DB7EF', fontSize: 11, fontWeight: '800', marginTop: 8 },
+  recordedLine: { color: '#7DE1C1', fontSize: 11, marginTop: 4 },
   instructions: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 8 },
   lowStock: { color: colors.warning, fontSize: 12, fontWeight: '900', marginTop: 10 },
   actions: { flexDirection: 'row', gap: 9, marginTop: 16 },
   action: { flex: 1, minHeight: 48, borderRadius: 15, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   takenButton: { backgroundColor: colors.blue, borderColor: colors.blue },
+  takenButtonDone: { backgroundColor: '#145246', borderColor: '#2F7567' },
   takenButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
   skipButtonText: { color: colors.muted, fontSize: 14, fontWeight: '900' },
   emptyCard: { backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.line, padding: 20 },
