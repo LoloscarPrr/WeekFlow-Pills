@@ -61,9 +61,10 @@ jobs:
         run: |
           if [ -n "$PILLS_KEYSTORE_BASE64" ] && [ -n "$PILLS_KEYSTORE_PASSWORD" ] && [ -n "$PILLS_KEY_ALIAS" ] && [ -n "$PILLS_KEY_PASSWORD" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Permanent signing: enabled"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Permanent WeekFlow Pills signing secrets are not configured yet. Building with the generated test signing key."
+            echo "::warning::Permanent WeekFlow Pills signing secrets are not configured yet. Building with test signing."
           fi
 
       - name: Restore permanent WeekFlow Pills signing key
@@ -87,24 +88,24 @@ jobs:
           const fs = require('fs');
           const path = 'android/app/build.gradle';
           const source = fs.readFileSync(path, 'utf8');
-          const signingMarker = '    signingConfigs {';
           const buildTypesMarker = '    buildTypes {';
-          const signingStart = source.indexOf(signingMarker);
           const buildTypesStart = source.indexOf(buildTypesMarker);
-          if (signingStart < 0 || buildTypesStart < 0) throw new Error('Could not locate Android signing blocks.');
-
-          const signingBlock = `
-        release {
-            storeFile file(System.getenv("PILLS_KEYSTORE_PATH"))
-            storePassword System.getenv("PILLS_KEYSTORE_PASSWORD")
-            keyAlias System.getenv("PILLS_KEY_ALIAS")
-            keyPassword System.getenv("PILLS_KEY_PASSWORD")
-        }
-`;
-          let output = source.slice(0, buildTypesStart) + signingBlock + source.slice(buildTypesStart);
+          if (buildTypesStart < 0) throw new Error('Could not locate Android buildTypes block.');
+          const releaseSigning = [
+            '    signingConfigs {',
+            '        release {',
+            '            storeFile file(System.getenv("PILLS_KEYSTORE_PATH"))',
+            '            storePassword System.getenv("PILLS_KEYSTORE_PASSWORD")',
+            '            keyAlias System.getenv("PILLS_KEY_ALIAS")',
+            '            keyPassword System.getenv("PILLS_KEY_PASSWORD")',
+            '        }',
+            '    }',
+            '',
+          ].join('\n');
+          let output = source.slice(0, buildTypesStart) + releaseSigning + source.slice(buildTypesStart);
           output = output.replace(
             /release \{([\s\S]*?)signingConfig signingConfigs\.debug/,
-            (match, body) => `release {${body}signingConfig signingConfigs.release`,
+            (match, body) => 'release {' + body + 'signingConfig signingConfigs.release',
           );
           if (!output.includes('signingConfig signingConfigs.release')) {
             throw new Error('Could not switch release build to permanent signing.');
@@ -138,7 +139,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WeekFlow-Pills-v${{ steps.signing.outputs.enabled == 'true' && 'Permanent-Signed' || 'Test-Signed' }}-APK
+          name: WeekFlow-Pills-Standalone-APK
           path: output/WeekFlow-Pills-v*-Standalone.apk
           if-no-files-found: error
           retention-days: 7
