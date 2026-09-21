@@ -61,6 +61,7 @@ function medicationNotificationContent(medicationId: number, scheduledTime: stri
     data: {
       medicationId,
       scheduledTime,
+      kind: scheduledDate ? 'snooze' : 'recurring',
       ...(scheduledDate ? { scheduledDate } : {}),
     },
   } satisfies Notifications.NotificationContentInput;
@@ -70,7 +71,13 @@ export async function syncMedicationNotifications() {
   const allowed = await ensurePermission();
   if (!allowed) return false;
 
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const request of scheduled) {
+    const kind = request.content.data?.kind;
+    if (kind !== 'snooze') {
+      await Notifications.cancelScheduledNotificationAsync(request.identifier);
+    }
+  }
 
   for (const medication of listMedications(false)) {
     for (const time of medication.times) {
