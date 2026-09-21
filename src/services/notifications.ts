@@ -113,7 +113,7 @@ export async function handleMedicationNotificationResponse(response: Notificatio
   if (action !== ACTION_TAKEN && action !== ACTION_SNOOZE) return;
 
   const request = response.notification.request;
-  const data = request.content.data;
+  const data = request.content.data ?? {};
   const medicationId = Number(data.medicationId);
   const scheduledTime = typeof data.scheduledTime === 'string' ? data.scheduledTime : null;
   if (!Number.isInteger(medicationId) || !scheduledTime) return;
