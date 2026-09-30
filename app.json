@@ -7,9 +7,7 @@
     "scheme": "weekflowpills",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#1B1026"
     },
@@ -19,11 +17,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.SCHEDULE_EXACT_ALARM"
-      ],
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1B1026"
-      }
+      ]
     },
     "plugins": [
       "expo-router",
