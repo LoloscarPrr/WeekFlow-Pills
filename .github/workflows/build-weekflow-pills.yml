@@ -49,6 +49,39 @@ jobs:
       - name: Typecheck
         run: npm run quality
 
+      - name: Generate branding assets
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),zlib=require('zlib');
+          fs.mkdirSync('assets',{recursive:true});
+          const T=(()=>{let t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+          const crc=b=>{let c=0xffffffff;for(const x of b)c=T[(c^x)&255]^(c>>>8);return (c^0xffffffff)>>>0;};
+          const chunk=(type,data)=>{const t=Buffer.from(type),l=Buffer.alloc(4),r=Buffer.alloc(4);l.writeUInt32BE(data.length);r.writeUInt32BE(crc(Buffer.concat([t,data])));return Buffer.concat([l,t,data,r]);};
+          function png(path,w,h,transparent=false){
+            const px=Buffer.alloc(w*h*4,0);
+            const put=(x,y,c)=>{if(x<0||x>=w||y<0||y>=h)return;const i=(y*w+x)*4;px[i]=c[0];px[i+1]=c[1];px[i+2]=c[2];px[i+3]=c[3]??255;};
+            const fill=c=>{for(let y=0;y<h;y++)for(let x=0;x<w;x++)put(x,y,c);};
+            const circle=(cx,cy,r,c)=>{for(let y=Math.max(0,cy-r);y<=Math.min(h-1,cy+r);y++)for(let x=Math.max(0,cx-r);x<=Math.min(w-1,cx+r);x++)if((x-cx)**2+(y-cy)**2<=r*r)put(x,y,c);};
+            const rect=(x0,y0,x1,y1,c)=>{for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)put(x,y,c);};
+            const line=(x0,y0,x1,y1,width,c)=>{const n=Math.max(Math.abs(x1-x0),Math.abs(y1-y0));for(let s=0;s<=n;s++){const x=Math.round(x0+(x1-x0)*s/n),y=Math.round(y0+(y1-y0)*s/n);circle(x,y,Math.max(1,width>>1),c);}};
+            if(!transparent)fill([27,16,38,255]);
+            const dark=[43,27,58,255],coral=[246,157,146,255],cream=[255,240,215,255],mint=[134,220,194,255],badge=[36,48,54,255];
+            if(!transparent){const r=Math.floor(Math.min(w,h)*.34);circle(Math.floor(w/2),Math.floor(h*.48),r,dark);}
+            const x0=Math.floor(w*.18),x1=Math.floor(w*.82),y0=Math.floor(h*.30),y1=Math.floor(h*.54),rr=Math.floor((y1-y0)/2),mid=Math.floor((x0+x1)/2);
+            rect(x0+rr,y0,x1-rr,y1,coral);circle(x0+rr,Math.floor((y0+y1)/2),rr,coral);circle(x1-rr,Math.floor((y0+y1)/2),rr,cream);rect(mid,y0,x1-rr,y1,cream);
+            const br=Math.floor(Math.min(w,h)*.13),bcx=Math.floor(w*.67),bcy=Math.floor(h*.69);circle(bcx,bcy,br,badge);
+            line(Math.floor(w*.58),Math.floor(h*.69),Math.floor(w*.64),Math.floor(h*.75),Math.max(8,Math.floor(w*.025)),mint);line(Math.floor(w*.64),Math.floor(h*.75),Math.floor(w*.75),Math.floor(h*.62),Math.max(8,Math.floor(w*.025)),mint);
+            const raw=Buffer.alloc((w*4+1)*h);for(let y=0;y<h;y++){const off=y*(w*4+1);raw[off]=0;px.copy(raw,off+1,y*w*4,(y+1)*w*4);}
+            const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(w,0);ihdr.writeUInt32BE(h,4);ihdr[8]=8;ihdr[9]=6;
+            fs.writeFileSync(path,Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',zlib.deflateSync(raw,{level:9})),chunk('IEND',Buffer.alloc(0))]));
+          }
+          png('assets/icon.png',512,512,false);
+          png('assets/adaptive-icon.png',512,512,true);
+          png('assets/splash.png',720,1280,false);
+          console.log('Generated valid WeekFlow Pills branding assets');
+          NODE
+
       - name: Generate Android project
         run: npx expo prebuild --platform android --no-install --clean
 
@@ -105,13 +138,8 @@ jobs:
             '',
           ].join('\n');
           let output = source.slice(0, buildTypesStart) + releaseSigning + source.slice(buildTypesStart);
-          output = output.replace(
-            /release \{([\s\S]*?)signingConfig signingConfigs\.debug/,
-            (match, body) => 'release {' + body + 'signingConfig signingConfigs.release',
-          );
-          if (!output.includes('signingConfig signingConfigs.release')) {
-            throw new Error('Could not switch release build to permanent signing.');
-          }
+          output = output.replace(/release \{([\s\S]*?)signingConfig signingConfigs\.debug/,(match,body)=>'release {'+body+'signingConfig signingConfigs.release');
+          if (!output.includes('signingConfig signingConfigs.release')) throw new Error('Could not switch release build to permanent signing.');
           fs.writeFileSync(path, output);
           NODE
 
