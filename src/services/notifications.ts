@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { createOccurrence, getMedicationById, listMedications, markNotificationActionHandled, recordIntake } from '@/src/data/medications';
-import { localDateKey } from '@/src/domain/medication';
+import { localDateKey, resolveMedicationTimes } from '@/src/domain/medication';
 
 const CHANNEL_ID = 'medication-reminders';
 const CATEGORY_ID = 'medicationactions';
@@ -80,7 +80,7 @@ export async function syncMedicationNotifications() {
   }
 
   for (const medication of listMedications(false)) {
-    for (const time of medication.times) {
+    for (const time of resolveMedicationTimes(medication)) {
       const [hour, minute] = time.split(':').map(Number);
       const content = medicationNotificationContent(medication.id, time);
       if (!content) continue;

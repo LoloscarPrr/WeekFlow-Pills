@@ -1,6 +1,6 @@
 {
   "name": "weekflow-pills",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -8,7 +8,9 @@
     "android": "expo start --android",
     "prebuild": "expo prebuild",
     "typecheck": "tsc --noEmit",
-    "quality": "npm run typecheck"
+    "test:schedule": "rm -rf .tmp-tests && tsc src/domain/medication.ts --module commonjs --target es2020 --outDir .tmp-tests --skipLibCheck && node scripts/schedule-tests.cjs && rm -rf .tmp-tests",
+    "test:v030": "node scripts/validate-v030.cjs",
+    "quality": "npm run typecheck && npm run test:schedule && npm run test:v030"
   },
   "dependencies": {
     "expo": "~57.0.8",

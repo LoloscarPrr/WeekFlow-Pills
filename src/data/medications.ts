@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
-import type { DoseOccurrence, HistoryEntry, IntakeStatus, Medication } from '@/src/domain/medication';
-import { localDateKey } from '@/src/domain/medication';
+import type { DoseOccurrence, HistoryEntry, IntakeStatus, Medication, ScheduleMode } from '@/src/domain/medication';
+import { localDateKey, resolveMedicationTimes } from '@/src/domain/medication';
 
 const db = SQLite.openDatabaseSync('weekflow-pills.db');
 
@@ -15,6 +15,27 @@ export type LastTaken = {
   recordedAt: string;
 };
 
+function ensureMedicationScheduleColumns() {
+  const columns = db.getAllSync<{ name: string }>('PRAGMA table_info(medications)');
+  const names = new Set(columns.map((column) => column.name));
+
+  if (!names.has('schedule_mode')) {
+    db.execSync("ALTER TABLE medications ADD COLUMN schedule_mode TEXT NOT NULL DEFAULT 'fixed';");
+  }
+  if (!names.has('interval_hours')) {
+    db.execSync('ALTER TABLE medications ADD COLUMN interval_hours INTEGER;');
+  }
+  if (!names.has('start_time')) {
+    db.execSync('ALTER TABLE medications ADD COLUMN start_time TEXT;');
+  }
+
+  db.execSync(`
+    UPDATE medications
+    SET schedule_mode = 'fixed'
+    WHERE schedule_mode IS NULL OR schedule_mode NOT IN ('fixed', 'interval');
+  `);
+}
+
 export function ensureDatabase() {
   if (initialized) return;
   db.execSync(`
@@ -28,6 +49,9 @@ export function ensureDatabase() {
       instructions TEXT NOT NULL DEFAULT '',
       times_json TEXT NOT NULL,
       days_json TEXT NOT NULL,
+      schedule_mode TEXT NOT NULL DEFAULT 'fixed',
+      interval_hours INTEGER,
+      start_time TEXT,
       stock INTEGER,
       low_stock_threshold INTEGER NOT NULL DEFAULT 5,
       active INTEGER NOT NULL DEFAULT 1,
@@ -64,6 +88,8 @@ export function ensureDatabase() {
     CREATE INDEX IF NOT EXISTS idx_intakes_date ON intakes(scheduled_date);
     CREATE INDEX IF NOT EXISTS idx_intakes_medication_status ON intakes(medication_id, status, recorded_at);
   `);
+
+  ensureMedicationScheduleColumns();
   initialized = true;
 }
 
@@ -74,12 +100,16 @@ type MedicationRow = {
   instructions: string;
   times_json: string;
   days_json: string;
+  schedule_mode: string;
+  interval_hours: number | null;
+  start_time: string | null;
   stock: number | null;
   low_stock_threshold: number;
   active: number;
 };
 
 function mapMedication(row: MedicationRow): Medication {
+  const scheduleMode: ScheduleMode = row.schedule_mode === 'interval' ? 'interval' : 'fixed';
   return {
     id: row.id,
     name: row.name,
@@ -87,19 +117,28 @@ function mapMedication(row: MedicationRow): Medication {
     instructions: row.instructions,
     times: JSON.parse(row.times_json) as string[],
     days: JSON.parse(row.days_json) as number[],
+    scheduleMode,
+    intervalHours: scheduleMode === 'interval' ? row.interval_hours : null,
+    startTime: scheduleMode === 'interval' ? row.start_time : null,
     stock: row.stock,
     lowStockThreshold: row.low_stock_threshold,
     active: row.active === 1,
   };
 }
 
+const medicationSelect = `
+  SELECT id, name, dose, instructions, times_json, days_json,
+         schedule_mode, interval_hours, start_time,
+         stock, low_stock_threshold, active
+  FROM medications
+`;
+
 export function listMedications(includeInactive = true): Medication[] {
   ensureDatabase();
   const rows = db.getAllSync<MedicationRow>(
-    `SELECT id, name, dose, instructions, times_json, days_json, stock, low_stock_threshold, active
-     FROM medications
+    `${medicationSelect}
      ${includeInactive ? '' : 'WHERE active = 1'}
-     ORDER BY active DESC, name COLLATE NOCASE ASC`
+     ORDER BY active DESC, name COLLATE NOCASE ASC`,
   );
   return rows.map(mapMedication);
 }
@@ -107,8 +146,7 @@ export function listMedications(includeInactive = true): Medication[] {
 export function getMedicationById(id: number): Medication | null {
   ensureDatabase();
   const row = db.getFirstSync<MedicationRow>(
-    `SELECT id, name, dose, instructions, times_json, days_json, stock, low_stock_threshold, active
-     FROM medications
+    `${medicationSelect}
      WHERE id = ?`,
     id,
   );
@@ -119,13 +157,17 @@ export function addMedication(input: Omit<Medication, 'id' | 'active'>) {
   ensureDatabase();
   db.runSync(
     `INSERT INTO medications
-      (name, dose, instructions, times_json, days_json, stock, low_stock_threshold, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      (name, dose, instructions, times_json, days_json, schedule_mode, interval_hours, start_time,
+       stock, low_stock_threshold, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
     input.name.trim(),
     input.dose.trim(),
     input.instructions.trim(),
     JSON.stringify(input.times),
     JSON.stringify(input.days),
+    input.scheduleMode,
+    input.intervalHours,
+    input.startTime,
     input.stock,
     input.lowStockThreshold,
     new Date().toISOString(),
@@ -136,13 +178,18 @@ export function updateMedication(input: Medication) {
   ensureDatabase();
   db.runSync(
     `UPDATE medications
-     SET name = ?, dose = ?, instructions = ?, times_json = ?, days_json = ?, stock = ?, low_stock_threshold = ?, active = ?
+     SET name = ?, dose = ?, instructions = ?, times_json = ?, days_json = ?,
+         schedule_mode = ?, interval_hours = ?, start_time = ?,
+         stock = ?, low_stock_threshold = ?, active = ?
      WHERE id = ?`,
     input.name.trim(),
     input.dose.trim(),
     input.instructions.trim(),
     JSON.stringify(input.times),
     JSON.stringify(input.days),
+    input.scheduleMode,
+    input.intervalHours,
+    input.startTime,
     input.stock,
     input.lowStockThreshold,
     input.active ? 1 : 0,
@@ -180,7 +227,7 @@ export function listTodayDoses(date = new Date()): DoseOccurrence[] {
 
   return meds
     .flatMap((medication) =>
-      medication.times.map((scheduledTime) => {
+      resolveMedicationTimes(medication).map((scheduledTime) => {
         const intake = byKey.get(`${medication.id}:${scheduledTime}`);
         return {
           medication,
@@ -195,6 +242,7 @@ export function listTodayDoses(date = new Date()): DoseOccurrence[] {
 }
 
 export function createOccurrence(medicationId: number, scheduledDate: string, scheduledTime: string): DoseOccurrence | null {
+  ensureDatabase();
   const medication = getMedicationById(medicationId);
   if (!medication) return null;
 
