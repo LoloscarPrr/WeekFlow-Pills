@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920">
+<defs>
+ <radialGradient id="bg" cx=".5" cy=".42" r=".9"><stop stop-color="#25105f"/><stop offset=".55" stop-color="#161044"/><stop offset="1" stop-color="#070c2d"/></radialGradient>
+ <linearGradient id="wave" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#391289"/><stop offset="1" stop-color="#8f24ff"/></linearGradient>
+ <linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff856f"/><stop offset=".5" stop-color="#ff2448"/><stop offset="1" stop-color="#b00046"/></linearGradient>
+ <linearGradient id="cream" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffef2"/><stop offset=".7" stop-color="#ffe2d2"/><stop offset="1" stop-color="#d8d7ef"/></linearGradient>
+ <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#3ff7e0"/><stop offset=".55" stop-color="#08c9bd"/><stop offset="1" stop-color="#007e89"/></linearGradient>
+ <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#9f25ff"/><stop offset=".75" stop-color="#f2d8ff"/><stop offset="1" stop-color="#7040ce"/></linearGradient>
+ <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity=".4"/></filter>
+</defs>
+<rect width="1080" height="1920" fill="url(#bg)"/>
+<path d="M0 0h1080v280C840 170 720 170 580 260S220 520 0 620z" fill="url(#wave)" opacity=".7"/>
+<path d="M0 1510c250 170 420 170 590 70s320-120 490-10v350H0z" fill="url(#wave)" opacity=".85"/>
+<ellipse cx="540" cy="920" rx="480" ry="650" fill="#0d0b33" opacity=".62"/>
+<circle cx="540" cy="655" r="280" fill="none" stroke="#8b20dc" stroke-width="14" opacity=".5"/>
+<g transform="rotate(-45 505 650)" filter="url(#shadow)"><rect x="390" y="390" width="230" height="520" rx="115" fill="url(#cream)"/><path d="M390 650h230v145c0 64-51 115-115 115s-115-51-115-115z" fill="url(#red)"/><rect x="390" y="638" width="230" height="24" rx="10" fill="#ff5660"/><path d="M432 430c-35 42-50 88-54 145" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width="22" stroke-linecap="round"/></g>
+<circle cx="678" cy="800" r="122" fill="url(#mint)" filter="url(#shadow)"/><path d="M622 801l38 39 78-91" fill="none" stroke="#fffdf5" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="540" y="1115" text-anchor="middle" fill="#fffaf5" font-family="Arial, sans-serif" font-size="116" font-weight="700">WeekFlow</text>
+<text x="540" y="1235" text-anchor="middle" fill="#a73cff" font-family="Arial, sans-serif" font-size="110" font-weight="700">Pills</text>
+<rect x="295" y="1370" width="490" height="14" rx="7" fill="#4d347e"/><rect x="295" y="1370" width="330" height="14" rx="7" fill="url(#bar)"/>
+</svg>

@@ -7,14 +7,20 @@
     "scheme": "weekflowpills",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#1B1026"
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#0B0B32"
     },
     "android": {
       "package": "com.weekflow.pills",
       "versionCode": 3,
       "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#17104A"
+      },
       "permissions": [
         "android.permission.SCHEDULE_EXACT_ALARM"
       ]
@@ -26,7 +32,7 @@
         "expo-notifications",
         {
           "defaultChannel": "medication-reminders",
-          "color": "#86DCC2"
+          "color": "#18D8C6"
         }
       ]
     ]
