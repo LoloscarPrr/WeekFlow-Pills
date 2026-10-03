@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AppState, Image, StyleSheet, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as ExpoSplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { BottomNav } from '@/src/components/BottomNav';
 import { ensureDatabase } from '@/src/data/medications';
@@ -9,8 +10,11 @@ import { useAdaptiveLayout } from '@/src/presentation/layout/useAdaptiveLayout';
 import { handleMedicationNotificationResponse, syncMedicationNotifications } from '@/src/services/notifications';
 import { colors } from '@/src/theme/colors';
 
+void ExpoSplashScreen.preventAutoHideAsync().catch(() => undefined);
+
 export default function RootLayout() {
   const { isWide, stageMaxWidth } = useAdaptiveLayout();
+  const [showBrandSplash, setShowBrandSplash] = useState(true);
 
   useEffect(() => {
     ensureDatabase();
@@ -38,11 +42,24 @@ export default function RootLayout() {
       }
     });
 
+    void ExpoSplashScreen.hideAsync().catch(() => undefined);
+    const splashTimer = setTimeout(() => setShowBrandSplash(false), 950);
+
     return () => {
+      clearTimeout(splashTimer);
       responseSubscription.remove();
       appStateSubscription.remove();
     };
   }, []);
+
+  if (showBrandSplash) {
+    return (
+      <View style={styles.brandSplash}>
+        <StatusBar style="light" />
+        <Image source={require('../assets/splash.png')} style={styles.brandSplashImage} resizeMode="cover" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -58,6 +75,8 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  brandSplash: { flex: 1, backgroundColor: '#2A1450' },
+  brandSplashImage: { width: '100%', height: '100%' },
   root: { flex: 1, backgroundColor: colors.bg },
   content: { flex: 1, alignItems: 'center' },
   stage: { flex: 1, width: '100%' },
