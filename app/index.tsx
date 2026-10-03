@@ -110,7 +110,7 @@ export default function TodayScreen() {
             <Text style={styles.brand}>WeekFlow</Text>
             <Text style={styles.brandSub}>PILLS</Text>
           </View>
-          <View style={styles.version}><Text style={styles.versionText}>v0.3.1</Text></View>
+          <View style={styles.version}><Text style={styles.versionText}>v0.3.2</Text></View>
         </View>
 
         <View style={styles.hero}>
