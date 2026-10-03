@@ -18,8 +18,8 @@ assert.match(data, /schedule_mode TEXT NOT NULL DEFAULT 'fixed'/);
 assert.match(data, /ALTER TABLE medications ADD COLUMN schedule_mode TEXT NOT NULL DEFAULT 'fixed'/);
 assert.match(data, /ALTER TABLE medications ADD COLUMN interval_hours INTEGER/);
 assert.match(data, /ALTER TABLE medications ADD COLUMN start_time TEXT/);
-assert.equal(appConfig.expo.version, '0.3.1');
-assert.equal(appConfig.expo.android.versionCode, 4);
+assert.equal(appConfig.expo.version, '0.3.2');
+assert.equal(appConfig.expo.android.versionCode, 5);
 assert.equal(appConfig.expo.android.package, 'com.weekflow.pills');
 
-console.log('WeekFlow Pills v0.3.1 integration checks F–H: OK');
+console.log('WeekFlow Pills v0.3.2 integration checks F–H: OK');
