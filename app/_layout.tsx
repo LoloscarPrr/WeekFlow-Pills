@@ -42,11 +42,22 @@ export default function RootLayout() {
       }
     });
 
-    void ExpoSplashScreen.hideAsync().catch(() => undefined);
-    const splashTimer = setTimeout(() => setShowBrandSplash(false), 950);
+    let splashTimer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        await ExpoSplashScreen.hideAsync();
+      } catch {
+        // If Android already released the native splash, continue with the branded layer.
+      }
+      if (cancelled) return;
+      splashTimer = setTimeout(() => setShowBrandSplash(false), 1250);
+    })();
 
     return () => {
-      clearTimeout(splashTimer);
+      cancelled = true;
+      if (splashTimer) clearTimeout(splashTimer);
       responseSubscription.remove();
       appStateSubscription.remove();
     };
@@ -56,7 +67,7 @@ export default function RootLayout() {
     return (
       <View style={styles.brandSplash}>
         <StatusBar style="light" />
-        <Image source={require('../assets/splash.png')} style={styles.brandSplashImage} resizeMode="cover" />
+        <Image source={require('../assets/splash.png')} style={styles.brandSplashImage} resizeMode="contain" />
       </View>
     );
   }
@@ -75,7 +86,7 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  brandSplash: { flex: 1, backgroundColor: '#2A1450' },
+  brandSplash: { flex: 1, backgroundColor: '#2A1450', alignItems: 'center', justifyContent: 'center' },
   brandSplashImage: { width: '100%', height: '100%' },
   root: { flex: 1, backgroundColor: colors.bg },
   content: { flex: 1, alignItems: 'center' },
