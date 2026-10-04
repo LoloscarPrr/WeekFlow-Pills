@@ -9,6 +9,7 @@ on:
       - "src/**"
       - "scripts/**"
       - "assets/**"
+      - "WeekFlow-Pills-official-assets.zip"
       - "app.json"
       - "package.json"
       - "tsconfig.json"
@@ -49,16 +50,18 @@ jobs:
       - name: Typecheck
         run: npm run quality
 
-      - name: Verify official WeekFlow Pills PNG assets
+      - name: Install exact official WeekFlow Pills PNG assets
         shell: bash
         run: |
           set -euo pipefail
+          test -s WeekFlow-Pills-official-assets.zip
+          unzip -o WeekFlow-Pills-official-assets.zip -d assets
           test -s assets/icon.png
           test -s assets/adaptive-icon.png
           test -s assets/adaptive-icon-background.png
           test -s assets/splash.png
           file assets/icon.png assets/adaptive-icon.png assets/adaptive-icon-background.png assets/splash.png
-          echo "Using committed PNG assets exactly as stored in the repository."
+          echo "Using the exact PNG files from WeekFlow-Pills-official-assets.zip without SVG regeneration."
 
       - name: Generate Android project
         run: npx expo prebuild --platform android --no-install --clean
