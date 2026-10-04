@@ -1,0 +1,1 @@
+WeekFlow Pills official branding assets are committed as PNG binaries and must not be regenerated from SVG during CI builds.
