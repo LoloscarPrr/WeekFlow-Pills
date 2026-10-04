@@ -1,21 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920">
 <defs>
- <radialGradient id="bg" cx=".5" cy=".42" r=".9"><stop stop-color="#25105f"/><stop offset=".55" stop-color="#161044"/><stop offset="1" stop-color="#070c2d"/></radialGradient>
- <linearGradient id="wave" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#391289"/><stop offset="1" stop-color="#8f24ff"/></linearGradient>
- <linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff856f"/><stop offset=".5" stop-color="#ff2448"/><stop offset="1" stop-color="#b00046"/></linearGradient>
- <linearGradient id="cream" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffef2"/><stop offset=".7" stop-color="#ffe2d2"/><stop offset="1" stop-color="#d8d7ef"/></linearGradient>
- <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#3ff7e0"/><stop offset=".55" stop-color="#08c9bd"/><stop offset="1" stop-color="#007e89"/></linearGradient>
- <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#9f25ff"/><stop offset=".75" stop-color="#f2d8ff"/><stop offset="1" stop-color="#7040ce"/></linearGradient>
- <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity=".4"/></filter>
+ <radialGradient id="bg" cx=".5" cy=".42" r=".9"><stop stop-color="#32106f"/><stop offset=".5" stop-color="#181044"/><stop offset="1" stop-color="#080928"/></radialGradient>
+ <linearGradient id="wave" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#401198"/><stop offset=".48" stop-color="#6816ce"/><stop offset="1" stop-color="#a925ff"/></linearGradient>
+ <linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff8a71"/><stop offset=".46" stop-color="#ff2b4c"/><stop offset="1" stop-color="#c00047"/></linearGradient>
+ <linearGradient id="cream" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffdf0"/><stop offset=".62" stop-color="#ffe6d5"/><stop offset="1" stop-color="#ddd8f2"/></linearGradient>
+ <linearGradient id="orbit" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#8c24ff"/><stop offset=".42" stop-color="#ff5cff"/><stop offset=".72" stop-color="#f8e8ff"/><stop offset="1" stop-color="#7040ff"/></linearGradient>
+ <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#9b25ff"/><stop offset=".72" stop-color="#fff2ff"/><stop offset="1" stop-color="#6740ce"/></linearGradient>
+ <filter id="glow"><feGaussianBlur stdDeviation="11" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <filter id="shadow"><feDropShadow dx="0" dy="20" stdDeviation="19" flood-color="#000" flood-opacity=".42"/></filter>
+ <clipPath id="pill"><rect x="414" y="352" width="252" height="526" rx="126"/></clipPath>
 </defs>
 <rect width="1080" height="1920" fill="url(#bg)"/>
-<path d="M0 0h1080v280C840 170 720 170 580 260S220 520 0 620z" fill="url(#wave)" opacity=".7"/>
-<path d="M0 1510c250 170 420 170 590 70s320-120 490-10v350H0z" fill="url(#wave)" opacity=".85"/>
-<ellipse cx="540" cy="920" rx="480" ry="650" fill="#0d0b33" opacity=".62"/>
-<circle cx="540" cy="655" r="280" fill="none" stroke="#8b20dc" stroke-width="14" opacity=".5"/>
-<g transform="rotate(-45 505 650)" filter="url(#shadow)"><rect x="390" y="390" width="230" height="520" rx="115" fill="url(#cream)"/><path d="M390 650h230v145c0 64-51 115-115 115s-115-51-115-115z" fill="url(#red)"/><rect x="390" y="638" width="230" height="24" rx="10" fill="#ff5660"/><path d="M432 430c-35 42-50 88-54 145" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width="22" stroke-linecap="round"/></g>
-<circle cx="678" cy="800" r="122" fill="url(#mint)" filter="url(#shadow)"/><path d="M622 801l38 39 78-91" fill="none" stroke="#fffdf5" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="540" y="1115" text-anchor="middle" fill="#fffaf5" font-family="Arial, sans-serif" font-size="116" font-weight="700">WeekFlow</text>
-<text x="540" y="1235" text-anchor="middle" fill="#a73cff" font-family="Arial, sans-serif" font-size="110" font-weight="700">Pills</text>
-<rect x="295" y="1370" width="490" height="14" rx="7" fill="#4d347e"/><rect x="295" y="1370" width="330" height="14" rx="7" fill="url(#bar)"/>
+<path d="M0 0h1080v300C824 158 694 170 548 282S220 520 0 610z" fill="url(#wave)" opacity=".72"/>
+<path d="M0 1450c232 115 389 99 567-17s323-132 513-31v518H0z" fill="url(#wave)" opacity=".86"/>
+<ellipse cx="540" cy="936" rx="485" ry="655" fill="#0d0b33" opacity=".62"/>
+<circle cx="540" cy="650" r="300" fill="none" stroke="#8320d8" stroke-width="13" opacity=".35"/>
+<g transform="rotate(-18 540 650)" fill="none" filter="url(#glow)"><ellipse cx="540" cy="660" rx="316" ry="171" stroke="#8022ff" stroke-width="15" opacity=".48"/><ellipse cx="540" cy="660" rx="316" ry="171" stroke="url(#orbit)" stroke-width="8" stroke-linecap="round" stroke-dasharray="680 120"/></g>
+<circle cx="270" cy="708" r="7" fill="#fff" filter="url(#glow)"/><circle cx="770" cy="518" r="6" fill="#d96cff" filter="url(#glow)"/><circle cx="790" cy="744" r="5" fill="#fff" filter="url(#glow)"/>
+<g transform="rotate(-45 540 615)" filter="url(#shadow)"><g clip-path="url(#pill)"><rect x="414" y="352" width="252" height="274" fill="url(#cream)"/><rect x="414" y="612" width="252" height="266" fill="url(#red)"/><rect x="414" y="600" width="252" height="25" fill="#ff5260"/><path d="M458 400c-36 43-52 91-56 147" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="22" stroke-linecap="round"/><path d="M457 670c-24 31-34 62-31 96" fill="none" stroke="#ffd7d6" stroke-opacity=".58" stroke-width="18" stroke-linecap="round"/></g><rect x="414" y="352" width="252" height="526" rx="126" fill="none" stroke="#ffb7dc" stroke-opacity=".5" stroke-width="4"/></g>
+<text x="540" y="1118" text-anchor="middle" fill="#fffaf5" font-family="Arial, sans-serif" font-size="116" font-weight="700">WeekFlow</text>
+<text x="540" y="1240" text-anchor="middle" fill="#ad43ff" font-family="Arial, sans-serif" font-size="112" font-weight="700">Pills</text>
+<rect x="300" y="1370" width="480" height="13" rx="7" fill="#4d347e"/><rect x="300" y="1370" width="334" height="13" rx="7" fill="url(#bar)"/>
 </svg>
