@@ -2,7 +2,7 @@
   "expo": {
     "name": "WeekFlow Pills",
     "slug": "weekflow-pills",
-    "version": "0.3.2",
+    "version": "0.3.3",
     "orientation": "portrait",
     "scheme": "weekflowpills",
     "userInterfaceStyle": "dark",
@@ -10,11 +10,11 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.weekflow.pills",
-      "versionCode": 5,
+      "versionCode": 6,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2A1450"
+        "backgroundColor": "#181044"
       },
       "permissions": [
         "android.permission.SCHEDULE_EXACT_ALARM"
@@ -26,12 +26,12 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#2A1450",
+          "backgroundColor": "#181044",
           "image": "./assets/adaptive-icon.png",
-          "imageWidth": 250,
+          "imageWidth": 280,
           "resizeMode": "contain",
           "dark": {
-            "backgroundColor": "#2A1450",
+            "backgroundColor": "#181044",
             "image": "./assets/adaptive-icon.png"
           }
         }
@@ -40,7 +40,7 @@
         "expo-notifications",
         {
           "defaultChannel": "medication-reminders",
-          "color": "#18D8C6"
+          "color": "#A925FF"
         }
       ]
     ]
