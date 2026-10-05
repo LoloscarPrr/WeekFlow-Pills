@@ -2,7 +2,7 @@
   "expo": {
     "name": "WeekFlow Pills",
     "slug": "weekflow-pills",
-    "version": "0.3.3",
+    "version": "0.3.4",
     "orientation": "portrait",
     "scheme": "weekflowpills",
     "userInterfaceStyle": "dark",
@@ -10,7 +10,7 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.weekflow.pills",
-      "versionCode": 6,
+      "versionCode": 7,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -27,12 +27,9 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#181044",
-          "image": "./assets/adaptive-icon.png",
-          "imageWidth": 280,
           "resizeMode": "contain",
           "dark": {
-            "backgroundColor": "#181044",
-            "image": "./assets/adaptive-icon.png"
+            "backgroundColor": "#181044"
           }
         }
       ],
