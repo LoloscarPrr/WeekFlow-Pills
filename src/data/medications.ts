@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import type { DoseOccurrence, HistoryEntry, IntakeStatus, Medication, ScheduleMode } from '@/src/domain/medication';
-import { localDateKey, resolveMedicationTimes } from '@/src/domain/medication';
+import { isUnresolvedDose, localDateKey, resolveMedicationTimes } from '@/src/domain/medication';
 
 const db = SQLite.openDatabaseSync('weekflow-pills.db');
 
@@ -106,6 +106,7 @@ type MedicationRow = {
   stock: number | null;
   low_stock_threshold: number;
   active: number;
+  created_at: string;
 };
 
 function mapMedication(row: MedicationRow): Medication {
@@ -123,13 +124,14 @@ function mapMedication(row: MedicationRow): Medication {
     stock: row.stock,
     lowStockThreshold: row.low_stock_threshold,
     active: row.active === 1,
+    createdAt: row.created_at,
   };
 }
 
 const medicationSelect = `
   SELECT id, name, dose, instructions, times_json, days_json,
          schedule_mode, interval_hours, start_time,
-         stock, low_stock_threshold, active
+         stock, low_stock_threshold, active, created_at
   FROM medications
 `;
 
@@ -214,11 +216,18 @@ type IntakeRow = {
   recorded_at: string;
 };
 
-export function listTodayDoses(date = new Date()): DoseOccurrence[] {
+function createdOnOrBefore(medication: Medication, dateKey: string) {
+  if (!medication.createdAt) return true;
+  return localDateKey(new Date(medication.createdAt)) <= dateKey;
+}
+
+export function listDosesForDate(date: Date): DoseOccurrence[] {
   ensureDatabase();
   const dateKey = localDateKey(date);
   const weekday = date.getDay();
-  const meds = listMedications(false).filter((medication) => medication.days.includes(weekday));
+  const meds = listMedications(false).filter(
+    (medication) => medication.days.includes(weekday) && createdOnOrBefore(medication, dateKey),
+  );
   const rows = db.getAllSync<IntakeRow>(
     'SELECT medication_id, scheduled_time, status, recorded_at FROM intakes WHERE scheduled_date = ?',
     dateKey,
@@ -239,6 +248,29 @@ export function listTodayDoses(date = new Date()): DoseOccurrence[] {
       }),
     )
     .sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
+}
+
+export function listTodayDoses(date = new Date()): DoseOccurrence[] {
+  return listDosesForDate(date);
+}
+
+export function listOutstandingDoses(now = new Date(), lookbackDays = 7): DoseOccurrence[] {
+  ensureDatabase();
+  if (!Number.isInteger(lookbackDays) || lookbackDays < 0 || lookbackDays > 31) {
+    throw new Error('lookbackDays debe ser un entero entre 0 y 31.');
+  }
+
+  const result: DoseOccurrence[] = [];
+  for (let offset = lookbackDays; offset >= 0; offset -= 1) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+    result.push(...listDosesForDate(date).filter((occurrence) => isUnresolvedDose(occurrence, now)));
+  }
+
+  return result.sort((a, b) => {
+    const left = `${a.scheduledDate}T${a.scheduledTime}`;
+    const right = `${b.scheduledDate}T${b.scheduledTime}`;
+    return left.localeCompare(right);
+  });
 }
 
 export function createOccurrence(medicationId: number, scheduledDate: string, scheduledTime: string): DoseOccurrence | null {
