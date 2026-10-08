@@ -1,52 +1,98 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { DoseOccurrence, IntakeStatus } from '@/src/domain/medication';
-import { listLastTakenByMedication, listTodayDoses, recordIntake, type LastTaken } from '@/src/data/medications';
+import { doseTimingState, localDateKey, type DoseOccurrence, type DoseTimingState, type IntakeStatus } from '@/src/domain/medication';
+import {
+  listLastTakenByMedication,
+  listOutstandingDoses,
+  listTodayDoses,
+  recordIntake,
+  type LastTaken,
+} from '@/src/data/medications';
 import { colors } from '@/src/theme/colors';
-
-function minutesOf(time: string) {
-  const [hour, minute] = time.split(':').map(Number);
-  return hour * 60 + minute;
-}
 
 function formatRecordedTime(iso: string) {
   const date = new Date(iso);
   return date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatScheduledDate(dateKey: string) {
+  const today = localDateKey();
+  if (dateKey === today) return 'Hoy';
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: 'short',
+  });
+}
+
 function lastTakenLabel(last: LastTaken | undefined) {
   if (!last) return 'Sin tomas registradas todavía';
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const prefix = last.scheduledDate === todayKey ? 'Hoy' : last.scheduledDate;
+  const prefix = last.scheduledDate === localDateKey() ? 'Hoy' : formatScheduledDate(last.scheduledDate);
   return `Última toma: ${prefix} · ${formatRecordedTime(last.recordedAt)}`;
+}
+
+function stateLabel(state: DoseTimingState, dose: DoseOccurrence) {
+  if (state === 'taken') return dose.recordedAt ? `Tomada · ${formatRecordedTime(dose.recordedAt)}` : 'Tomada';
+  if (state === 'skipped') return 'Omitida';
+  if (state === 'overdue') return `Atrasada · desde ${dose.scheduledTime}`;
+  if (state === 'pending') return 'Pendiente';
+  return `Próxima · ${dose.scheduledTime}`;
+}
+
+function sortBySchedule(a: DoseOccurrence, b: DoseOccurrence) {
+  return `${a.scheduledDate}T${a.scheduledTime}`.localeCompare(`${b.scheduledDate}T${b.scheduledTime}`);
 }
 
 export default function TodayScreen() {
   const [doses, setDoses] = useState<DoseOccurrence[]>([]);
+  const [outstanding, setOutstanding] = useState<DoseOccurrence[]>([]);
   const [lastTaken, setLastTaken] = useState<Record<number, LastTaken>>({});
+  const [clock, setClock] = useState(() => new Date());
 
   const refresh = () => {
-    setDoses(listTodayDoses());
+    const now = new Date();
+    setClock(now);
+    setDoses(listTodayDoses(now));
+    setOutstanding(listOutstandingDoses(now, 7));
     setLastTaken(listLastTakenByMedication());
   };
 
   useEffect(() => {
     refresh();
+    const timer = setInterval(() => setClock(new Date()), 30_000);
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh();
     });
-    return () => subscription.remove();
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
   }, []);
 
-  const nextDose = useMemo(() => {
-    const pending = doses.filter((item) => item.status === null);
-    if (!pending.length) return null;
-    const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    return pending.find((item) => minutesOf(item.scheduledTime) >= nowMinutes) ?? pending[0];
-  }, [doses]);
+  const groups = useMemo(() => {
+    const overdueToday = doses.filter((item) => doseTimingState(item, clock) === 'overdue');
+    const pendingToday = doses.filter((item) => doseTimingState(item, clock) === 'pending');
+    const upcoming = doses.filter((item) => doseTimingState(item, clock) === 'upcoming');
+    const resolved = doses.filter((item) => ['taken', 'skipped'].includes(doseTimingState(item, clock)));
+    const previousUnresolved = outstanding.filter((item) => item.scheduledDate !== localDateKey(clock));
+
+    return {
+      overdueToday: overdueToday.sort(sortBySchedule),
+      pendingToday: pendingToday.sort(sortBySchedule),
+      upcoming: upcoming.sort(sortBySchedule),
+      resolved: resolved.sort(sortBySchedule),
+      previousUnresolved: previousUnresolved.sort(sortBySchedule),
+    };
+  }, [doses, outstanding, clock]);
+
+  const focusDose = useMemo(() => {
+    if (groups.previousUnresolved.length) return groups.previousUnresolved[0];
+    if (groups.overdueToday.length) return groups.overdueToday[0];
+    if (groups.pendingToday.length) return groups.pendingToday[0];
+    if (groups.upcoming.length) return groups.upcoming[0];
+    return null;
+  }, [groups]);
 
   const commitStatus = (dose: DoseOccurrence, status: IntakeStatus) => {
     const result = recordIntake(dose, status);
@@ -102,6 +148,75 @@ export default function TodayScreen() {
     );
   };
 
+  const renderDoseCard = (item: DoseOccurrence, compact = false) => {
+    const state = doseTimingState(item, clock);
+    return (
+      <View
+        key={`${item.medication.id}-${item.scheduledDate}-${item.scheduledTime}`}
+        style={[
+          styles.doseCard,
+          state === 'overdue' && styles.doseCardOverdue,
+          state === 'taken' && styles.doseCardResolved,
+          state === 'skipped' && styles.doseCardResolved,
+        ]}
+      >
+        <View style={styles.doseHead}>
+          <View>
+            <Text style={styles.time}>{item.scheduledTime}</Text>
+            {item.scheduledDate !== localDateKey(clock) ? (
+              <Text style={styles.dateTag}>{formatScheduledDate(item.scheduledDate)}</Text>
+            ) : null}
+          </View>
+          <View
+            style={[
+              styles.statusPill,
+              state === 'overdue' && styles.statusOverdue,
+              state === 'taken' && styles.statusTaken,
+              state === 'skipped' && styles.statusSkipped,
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusText,
+                state === 'overdue' && styles.statusOverdueText,
+                state === 'taken' && styles.statusTakenText,
+                state === 'skipped' && styles.statusSkippedText,
+              ]}
+            >
+              {stateLabel(state, item)}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.medName}>{item.medication.name}</Text>
+        <Text style={styles.medDose}>{item.medication.dose}</Text>
+
+        {!compact ? (
+          <>
+            <Text style={styles.lastDoseLine}>{lastTakenLabel(lastTaken[item.medication.id])}</Text>
+            {item.medication.instructions ? <Text style={styles.instructions}>{item.medication.instructions}</Text> : null}
+            {item.medication.stock !== null && item.medication.stock <= item.medication.lowStockThreshold ? (
+              <Text style={styles.lowStock}>Quedan {item.medication.stock} unidades · stock bajo</Text>
+            ) : null}
+          </>
+        ) : null}
+
+        {(state === 'upcoming' || state === 'pending' || state === 'overdue') ? (
+          <View style={styles.actions}>
+            <Pressable style={[styles.action, styles.takenButton]} onPress={() => save(item, 'taken')}>
+              <Text style={styles.takenButtonText}>✓ Tomado</Text>
+            </Pressable>
+            <Pressable style={styles.action} onPress={() => save(item, 'skipped')}>
+              <Text style={styles.skipButtonText}>Omitir</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  const focusState = focusDose ? doseTimingState(focusDose, clock) : null;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -110,82 +225,91 @@ export default function TodayScreen() {
             <Text style={styles.brand}>WeekFlow</Text>
             <Text style={styles.brandSub}>PILLS</Text>
           </View>
-          <View style={styles.version}><Text style={styles.versionText}>v0.3.4</Text></View>
+          <View style={styles.version}><Text style={styles.versionText}>v0.4 · fase 4.2</Text></View>
         </View>
 
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>HOY</Text>
-          <Text style={styles.title}>Medicamentos de hoy</Text>
-          <Text style={styles.subtitle}>Solo lo que toca hoy, sin ruido.</Text>
+          <Text style={styles.title}>Tu día, de un vistazo</Text>
+          <Text style={styles.subtitle}>Primero lo pendiente. Después, lo que viene.</Text>
         </View>
 
-        <View style={styles.nextCard}>
-          <Text style={styles.nextLabel}>{nextDose ? 'PRÓXIMA TOMA' : 'ESTADO DE HOY'}</Text>
-          {nextDose ? (
+        <View style={[styles.nowCard, focusState === 'overdue' && styles.nowCardOverdue]}>
+          <Text style={[styles.nowLabel, focusState === 'overdue' && styles.nowLabelOverdue]}>AHORA</Text>
+          {focusDose ? (
             <>
-              <Text style={styles.nextTime}>{nextDose.scheduledTime}</Text>
-              <Text style={styles.nextName}>{nextDose.medication.name}</Text>
-              <Text style={styles.nextDose}>{nextDose.medication.dose}</Text>
-              <Text style={styles.lastTaken}>{lastTakenLabel(lastTaken[nextDose.medication.id])}</Text>
-              {nextDose.medication.instructions ? (
-                <Text style={styles.nextInstructions}>{nextDose.medication.instructions}</Text>
+              <Text style={styles.nowStatus}>{stateLabel(focusState!, focusDose)}</Text>
+              <Text style={styles.nowTime}>{focusDose.scheduledTime}</Text>
+              <Text style={styles.nowName}>{focusDose.medication.name}</Text>
+              <Text style={styles.nowDose}>{focusDose.medication.dose}</Text>
+              {focusDose.scheduledDate !== localDateKey(clock) ? (
+                <Text style={styles.nowPrevious}>Programada para {formatScheduledDate(focusDose.scheduledDate)}</Text>
               ) : null}
+              <Text style={styles.lastTaken}>{lastTakenLabel(lastTaken[focusDose.medication.id])}</Text>
+              {focusDose.medication.instructions ? (
+                <Text style={styles.nowInstructions}>{focusDose.medication.instructions}</Text>
+              ) : null}
+              <View style={styles.actions}>
+                <Pressable style={[styles.action, styles.takenButton]} onPress={() => save(focusDose, 'taken')}>
+                  <Text style={styles.takenButtonText}>✓ TOMADO</Text>
+                </Pressable>
+                <Pressable style={styles.action} onPress={() => save(focusDose, 'skipped')}>
+                  <Text style={styles.skipButtonText}>OMITIR</Text>
+                </Pressable>
+              </View>
             </>
           ) : (
             <>
-              <Text style={styles.doneTitle}>{doses.length ? 'Todo está registrado' : 'Sin tomas programadas'}</Text>
+              <Text style={styles.doneTitle}>{doses.length ? 'Todo está resuelto por ahora' : 'Sin tomas programadas'}</Text>
               <Text style={styles.doneCopy}>
-                {doses.length ? 'No quedan medicamentos pendientes para hoy.' : 'Agrega el primer medicamento desde la pestaña Medicamentos.'}
+                {doses.length ? 'No quedan tomas pendientes para este momento.' : 'Agrega el primer medicamento desde la pestaña Medicamentos.'}
               </Text>
             </>
           )}
         </View>
 
-        <Text style={styles.section}>TOMAS DEL DÍA</Text>
-        {doses.length ? doses.map((item) => (
-          <View key={`${item.medication.id}-${item.scheduledTime}`} style={styles.doseCard}>
-            <View style={styles.doseHead}>
-              <Text style={styles.time}>{item.scheduledTime}</Text>
-              <View style={[styles.statusPill, item.status === 'taken' && styles.statusTaken, item.status === 'skipped' && styles.statusSkipped]}>
-                <Text style={[styles.statusText, item.status === 'taken' && styles.statusTakenText, item.status === 'skipped' && styles.statusSkippedText]}>
-                  {item.status === 'taken' ? 'Tomado' : item.status === 'skipped' ? 'Omitido' : 'Pendiente'}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.medName}>{item.medication.name}</Text>
-            <Text style={styles.medDose}>{item.medication.dose}</Text>
-            <Text style={styles.lastDoseLine}>{lastTakenLabel(lastTaken[item.medication.id])}</Text>
-            {item.status === 'taken' && item.recordedAt ? (
-              <Text style={styles.recordedLine}>Esta toma se registró a las {formatRecordedTime(item.recordedAt)}</Text>
-            ) : null}
-            {item.medication.instructions ? <Text style={styles.instructions}>{item.medication.instructions}</Text> : null}
-
-            {item.medication.stock !== null && item.medication.stock <= item.medication.lowStockThreshold ? (
-              <Text style={styles.lowStock}>Quedan {item.medication.stock} unidades · stock bajo</Text>
-            ) : null}
-
-            <View style={styles.actions}>
-              <Pressable
-                style={[styles.action, styles.takenButton, item.status === 'taken' && styles.takenButtonDone]}
-                onPress={() => save(item, 'taken')}
-              >
-                <Text style={styles.takenButtonText}>{item.status === 'taken' ? '✓ Registrado' : '✓ Tomado'}</Text>
-              </Pressable>
-              <Pressable style={styles.action} onPress={() => save(item, 'skipped')}>
-                <Text style={styles.skipButtonText}>{item.status === 'skipped' ? 'Omitido ✓' : 'Omitir'}</Text>
-              </Pressable>
-            </View>
+        {groups.previousUnresolved.length ? (
+          <View style={styles.previousAlert}>
+            <Text style={styles.previousAlertTitle}>
+              {groups.previousUnresolved.length === 1
+                ? 'Tienes 1 toma anterior sin resolver'
+                : `Tienes ${groups.previousUnresolved.length} tomas anteriores sin resolver`}
+            </Text>
+            <Text style={styles.previousAlertCopy}>Se mantienen con su fecha y hora originales hasta que las marques como tomadas u omitidas.</Text>
           </View>
-        )) : (
+        ) : null}
+
+        {groups.overdueToday.length ? (
+          <>
+            <Text style={[styles.section, styles.sectionOverdue]}>ATRASADAS</Text>
+            {groups.overdueToday.map((item) => renderDoseCard(item))}
+          </>
+        ) : null}
+
+        {groups.upcoming.length ? (
+          <>
+            <Text style={styles.section}>PRÓXIMAS</Text>
+            {groups.upcoming.map((item) => renderDoseCard(item, true))}
+          </>
+        ) : null}
+
+        {groups.resolved.length ? (
+          <>
+            <Text style={styles.section}>RESUELTAS HOY</Text>
+            {groups.resolved.map((item) => renderDoseCard(item, true))}
+          </>
+        ) : null}
+
+        {!doses.length ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Todavía no hay nada aquí</Text>
             <Text style={styles.emptyCopy}>Configura un medicamento y sus horarios para comenzar.</Text>
           </View>
-        )}
+        ) : null}
 
         <View style={styles.safety}>
           <Text style={styles.safetyTitle}>Importante</Text>
-          <Text style={styles.safetyCopy}>WeekFlow Pills registra y recuerda lo que ingreses. No cambia dosis ni indica qué hacer ante una toma olvidada.</Text>
+          <Text style={styles.safetyCopy}>“Atrasada” significa que pasó la hora que configuraste. WeekFlow Pills no indica si corresponde tomar esa dosis después.</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -199,43 +323,54 @@ const styles = StyleSheet.create({
   brand: { color: colors.text, fontSize: 20, fontWeight: '900', letterSpacing: 0.3 },
   brandSub: { color: '#76AFFF', fontSize: 10, fontWeight: '900', letterSpacing: 4, marginTop: 2 },
   version: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
-  versionText: { color: colors.muted, fontSize: 12, fontWeight: '800' },
+  versionText: { color: colors.muted, fontSize: 11, fontWeight: '800' },
   hero: { marginTop: 28, marginBottom: 16 },
   eyebrow: { color: '#76AFFF', fontSize: 13, fontWeight: '900', letterSpacing: 4 },
   title: { color: colors.text, fontSize: 29, lineHeight: 35, fontWeight: '900', marginTop: 7 },
   subtitle: { color: colors.muted, fontSize: 14, marginTop: 6 },
-  nextCard: { backgroundColor: '#102A4D', borderRadius: 26, borderWidth: 1, borderColor: '#2A5D99', padding: 20 },
-  nextLabel: { color: '#76AFFF', fontSize: 12, fontWeight: '900', letterSpacing: 2.5 },
-  nextTime: { color: colors.text, fontSize: 42, lineHeight: 49, fontWeight: '900', marginTop: 10 },
-  nextName: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 2 },
-  nextDose: { color: '#A9CFFF', fontSize: 15, fontWeight: '800', marginTop: 4 },
+  nowCard: { backgroundColor: '#102A4D', borderRadius: 26, borderWidth: 1, borderColor: '#2A5D99', padding: 20 },
+  nowCardOverdue: { backgroundColor: '#321B24', borderColor: '#7B3B49' },
+  nowLabel: { color: '#76AFFF', fontSize: 12, fontWeight: '900', letterSpacing: 2.5 },
+  nowLabelOverdue: { color: '#FF9AA4' },
+  nowStatus: { color: '#B8C9E0', fontSize: 13, fontWeight: '900', marginTop: 12, textTransform: 'uppercase' },
+  nowTime: { color: colors.text, fontSize: 42, lineHeight: 49, fontWeight: '900', marginTop: 3 },
+  nowName: { color: colors.text, fontSize: 22, fontWeight: '900', marginTop: 2 },
+  nowDose: { color: '#A9CFFF', fontSize: 15, fontWeight: '800', marginTop: 4 },
+  nowPrevious: { color: '#FFB7BE', fontSize: 12, fontWeight: '800', marginTop: 8 },
   lastTaken: { color: '#7DE1C1', fontSize: 12, fontWeight: '800', marginTop: 10 },
-  nextInstructions: { color: '#C2D0E3', fontSize: 13, lineHeight: 19, marginTop: 10 },
+  nowInstructions: { color: '#C2D0E3', fontSize: 13, lineHeight: 19, marginTop: 10 },
   doneTitle: { color: colors.text, fontSize: 22, fontWeight: '900', marginTop: 14 },
   doneCopy: { color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 6 },
+  previousAlert: { marginTop: 14, borderRadius: 18, backgroundColor: '#251B31', borderWidth: 1, borderColor: '#513463', padding: 15 },
+  previousAlertTitle: { color: '#E7C8FF', fontSize: 14, fontWeight: '900' },
+  previousAlertCopy: { color: '#B7A6C8', fontSize: 12, lineHeight: 18, marginTop: 5 },
   section: { color: '#76AFFF', fontSize: 13, fontWeight: '900', letterSpacing: 3, marginTop: 28, marginBottom: 11 },
+  sectionOverdue: { color: '#FF9AA4' },
   doseCard: { backgroundColor: colors.surface, borderRadius: 23, borderWidth: 1, borderColor: colors.line, padding: 17, marginBottom: 11 },
-  doseHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  doseCardOverdue: { backgroundColor: '#21131A', borderColor: '#60313D' },
+  doseCardResolved: { opacity: 0.76 },
+  doseHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   time: { color: '#76AFFF', fontSize: 19, fontWeight: '900' },
-  statusPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.surface2 },
+  dateTag: { color: colors.muted, fontSize: 11, fontWeight: '800', marginTop: 2 },
+  statusPill: { flexShrink: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.surface2 },
+  statusOverdue: { backgroundColor: '#4A202A' },
   statusTaken: { backgroundColor: '#103B35' },
   statusSkipped: { backgroundColor: '#3B2027' },
-  statusText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
+  statusText: { color: colors.muted, fontSize: 11, fontWeight: '900', textAlign: 'right' },
+  statusOverdueText: { color: '#FF9AA4' },
   statusTakenText: { color: '#7DE1C1' },
   statusSkippedText: { color: '#FF9AA4' },
   medName: { color: colors.text, fontSize: 19, fontWeight: '900', marginTop: 13 },
   medDose: { color: '#B8C9E0', fontSize: 14, fontWeight: '800', marginTop: 3 },
   lastDoseLine: { color: '#8DB7EF', fontSize: 11, fontWeight: '800', marginTop: 8 },
-  recordedLine: { color: '#7DE1C1', fontSize: 11, marginTop: 4 },
   instructions: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 8 },
   lowStock: { color: colors.warning, fontSize: 12, fontWeight: '900', marginTop: 10 },
   actions: { flexDirection: 'row', gap: 9, marginTop: 16 },
-  action: { flex: 1, minHeight: 48, borderRadius: 15, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  action: { flex: 1, minHeight: 50, borderRadius: 15, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   takenButton: { backgroundColor: colors.blue, borderColor: colors.blue },
-  takenButtonDone: { backgroundColor: '#145246', borderColor: '#2F7567' },
   takenButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
   skipButtonText: { color: colors.muted, fontSize: 14, fontWeight: '900' },
-  emptyCard: { backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.line, padding: 20 },
+  emptyCard: { backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.line, padding: 20, marginTop: 20 },
   emptyTitle: { color: colors.text, fontSize: 17, fontWeight: '900' },
   emptyCopy: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
   safety: { marginTop: 24, borderRadius: 18, backgroundColor: '#111C30', padding: 15 },
