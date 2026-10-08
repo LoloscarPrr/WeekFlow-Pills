@@ -1,5 +1,6 @@
 export type IntakeStatus = 'taken' | 'skipped';
 export type ScheduleMode = 'fixed' | 'interval';
+export type DoseTimingState = 'upcoming' | 'pending' | 'overdue' | 'taken' | 'skipped';
 
 export type Medication = {
   id: number;
@@ -14,6 +15,7 @@ export type Medication = {
   stock: number | null;
   lowStockThreshold: number;
   active: boolean;
+  createdAt?: string;
 };
 
 export type DoseOccurrence = {
@@ -103,6 +105,56 @@ export function localDateKey(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+export function scheduledDateTime(scheduledDate: string, scheduledTime: string): Date {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(scheduledDate);
+  if (!dateMatch) throw new Error(`Fecha programada inválida: ${scheduledDate}.`);
+  const normalizedTime = normalizeTime(scheduledTime);
+  const [hour, minute] = normalizedTime.split(':').map(Number);
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]) - 1;
+  const day = Number(dateMatch[3]);
+  const result = new Date(year, month, day, hour, minute, 0, 0);
+  if (
+    result.getFullYear() !== year ||
+    result.getMonth() !== month ||
+    result.getDate() !== day
+  ) {
+    throw new Error(`Fecha programada inválida: ${scheduledDate}.`);
+  }
+  return result;
+}
+
+export function doseTimingState(
+  occurrence: Pick<DoseOccurrence, 'scheduledDate' | 'scheduledTime' | 'status'>,
+  now = new Date(),
+): DoseTimingState {
+  if (occurrence.status === 'taken') return 'taken';
+  if (occurrence.status === 'skipped') return 'skipped';
+
+  const scheduled = scheduledDateTime(occurrence.scheduledDate, occurrence.scheduledTime);
+  const nowMinute = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    now.getHours(),
+    now.getMinutes(),
+    0,
+    0,
+  );
+
+  if (scheduled.getTime() > nowMinute.getTime()) return 'upcoming';
+  if (scheduled.getTime() === nowMinute.getTime()) return 'pending';
+  return 'overdue';
+}
+
+export function isUnresolvedDose(
+  occurrence: Pick<DoseOccurrence, 'scheduledDate' | 'scheduledTime' | 'status'>,
+  now = new Date(),
+): boolean {
+  if (occurrence.status !== null) return false;
+  return scheduledDateTime(occurrence.scheduledDate, occurrence.scheduledTime).getTime() <= now.getTime();
 }
 
 export function formatDays(days: number[]) {
