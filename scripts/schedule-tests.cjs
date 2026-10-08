@@ -1,5 +1,12 @@
 const assert = require('node:assert/strict');
-const { generateTimesFromInterval, normalizeTimes, resolveMedicationTimes } = require('../.tmp-tests/medication.js');
+const {
+  doseTimingState,
+  generateTimesFromInterval,
+  isUnresolvedDose,
+  normalizeTimes,
+  resolveMedicationTimes,
+  scheduledDateTime,
+} = require('../.tmp-tests/medication.js');
 
 function medication(overrides = {}) {
   return {
@@ -15,6 +22,17 @@ function medication(overrides = {}) {
     stock: null,
     lowStockThreshold: 5,
     active: true,
+    ...overrides,
+  };
+}
+
+function occurrence(overrides = {}) {
+  return {
+    medication: medication(),
+    scheduledDate: '2026-10-08',
+    scheduledTime: '09:00',
+    status: null,
+    recordedAt: null,
     ...overrides,
   };
 }
@@ -41,8 +59,25 @@ assert.deepEqual(
   ['08:30', '20:30'],
 );
 
+// Fase 4.1 — estados temporales explícitos.
+const now = new Date(2026, 9, 8, 9, 0, 30);
+assert.equal(doseTimingState(occurrence({ scheduledTime: '10:00' }), now), 'upcoming');
+assert.equal(doseTimingState(occurrence({ scheduledTime: '09:00' }), now), 'pending');
+assert.equal(doseTimingState(occurrence({ scheduledTime: '08:59' }), now), 'overdue');
+assert.equal(doseTimingState(occurrence({ status: 'taken' }), now), 'taken');
+assert.equal(doseTimingState(occurrence({ status: 'skipped' }), now), 'skipped');
+
+// Una toma no resuelta conserva su fecha original al cruzar medianoche.
+const afterMidnight = new Date(2026, 9, 9, 0, 20, 0);
+const previousDay = occurrence({ scheduledDate: '2026-10-08', scheduledTime: '23:00' });
+assert.equal(doseTimingState(previousDay, afterMidnight), 'overdue');
+assert.equal(isUnresolvedDose(previousDay, afterMidnight), true);
+assert.equal(isUnresolvedDose({ ...previousDay, status: 'skipped' }, afterMidnight), false);
+assert.equal(scheduledDateTime('2026-10-08', '23:00').getDate(), 8);
+
 assert.throws(() => generateTimesFromInterval('09:00', 0));
 assert.throws(() => generateTimesFromInterval('09:00', 25));
 assert.throws(() => generateTimesFromInterval('25:00', 6));
+assert.throws(() => scheduledDateTime('2026-02-31', '09:00'));
 
-console.log('WeekFlow Pills v0.3.0 scheduling tests A–E: OK');
+console.log('WeekFlow Pills scheduling + Phase 4.1 timing tests: OK');
