@@ -27,10 +27,14 @@ assert.match(data, /ALTER TABLE medications ADD COLUMN interval_hours INTEGER/);
 assert.match(data, /ALTER TABLE medications ADD COLUMN start_time TEXT/);
 assert.match(data, /ALTER TABLE medications ADD COLUMN start_date TEXT NOT NULL DEFAULT '1970-01-01'/);
 assert.match(data, /ALTER TABLE medications ADD COLUMN end_date TEXT/);
+assert.match(data, /ALTER TABLE medications ADD COLUMN archived INTEGER NOT NULL DEFAULT 0/);
+assert.match(data, /WHERE archived = 0/);
+assert.match(data, /WHERE archived = 1/);
+assert.match(data, /SET archived = \?, active = \?/);
 assert.equal(appConfig.expo.version, '0.3.4');
 assert.equal(appConfig.expo.android.versionCode, 7);
 assert.equal(appConfig.expo.android.package, 'com.weekflow.pills');
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.SCHEDULE_EXACT_ALARM'));
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.RECEIVE_BOOT_COMPLETED'));
 
-console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3/4.4: OK');
+console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3/4.4/4.5: OK');
