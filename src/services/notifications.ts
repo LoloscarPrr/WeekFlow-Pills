@@ -7,7 +7,7 @@ import {
   markNotificationActionHandled,
   recordIntake,
 } from '@/src/data/medications';
-import { localDateKey, resolveMedicationTimes } from '@/src/domain/medication';
+import { localDateKey, medicationRunsOnDate, resolveMedicationTimes, scheduledDateTime } from '@/src/domain/medication';
 
 const CHANNEL_ID = 'medication-reminders';
 const CATEGORY_ID = 'medicationactions';
@@ -73,6 +73,7 @@ function medicationNotificationContent(
   if (!medication) return null;
 
   const scheduledDate = options?.scheduledDate;
+  const kind = scheduledDate ? (options?.notificationKey?.startsWith('snooze:') ? 'snooze' : 'dated') : 'recurring';
   return {
     title: `Hora de ${medication.name}`,
     body: [medication.dose, medication.instructions].filter(Boolean).join(' · '),
@@ -82,7 +83,7 @@ function medicationNotificationContent(
       managedBy: MANAGED_BY,
       medicationId,
       scheduledTime,
-      kind: scheduledDate ? 'snooze' : 'recurring',
+      kind,
       ...(scheduledDate ? { scheduledDate } : {}),
       ...(options?.notificationKey ? { notificationKey: options.notificationKey } : {}),
     },
@@ -104,7 +105,7 @@ async function performSync() {
     // Old WeekFlow Pills builds did not include managedBy. Their recurring notifications
     // still carry kind=recurring, so remove them once to avoid duplicate alerts.
     const isLegacyRecurring = managedBy === undefined && kind === 'recurring';
-    const isManagedRecurring = managedBy === MANAGED_BY && kind === 'recurring';
+    const isManagedRecurring = managedBy === MANAGED_BY && (kind === 'recurring' || kind === 'dated');
 
     if (isLegacyRecurring || isManagedRecurring) {
       await Notifications.cancelScheduledNotificationAsync(request.identifier);
@@ -113,18 +114,56 @@ async function performSync() {
 
   const desiredKeys = new Set<string>();
 
+  const now = new Date();
+  const todayKey = localDateKey(now);
+
   for (const medication of listMedications(false)) {
-    for (const time of resolveMedicationTimes(medication)) {
+    const times = resolveMedicationTimes(medication);
+    const hasDateBoundary = medication.startDate > todayKey || medication.endDate !== null;
+
+    if (hasDateBoundary) {
+      const horizon = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 90);
+      for (let offset = 0; offset <= 90; offset += 1) {
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+        if (date > horizon) break;
+        if (!medicationRunsOnDate(medication, date)) continue;
+        const dateKey = localDateKey(date);
+
+        for (const time of times) {
+          const when = scheduledDateTime(dateKey, time);
+          if (when.getTime() <= now.getTime()) continue;
+          const key = `dated:${medication.id}:${dateKey}:${time}`;
+          if (desiredKeys.has(key)) continue;
+          desiredKeys.add(key);
+
+          const content = medicationNotificationContent(medication.id, time, {
+            scheduledDate: dateKey,
+            notificationKey: key,
+          });
+          if (!content) continue;
+
+          await Notifications.scheduleNotificationAsync({
+            content,
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: when,
+              channelId: CHANNEL_ID,
+            },
+          });
+        }
+      }
+      continue;
+    }
+
+    for (const time of times) {
       const [hour, minute] = time.split(':').map(Number);
 
       if (medication.days.length === 7) {
         const key = notificationKey(medication.id, time);
         if (desiredKeys.has(key)) continue;
         desiredKeys.add(key);
-
         const content = medicationNotificationContent(medication.id, time, { notificationKey: key });
         if (!content) continue;
-
         await Notifications.scheduleNotificationAsync({
           content,
           trigger: {
@@ -139,10 +178,8 @@ async function performSync() {
           const key = notificationKey(medication.id, time, day);
           if (desiredKeys.has(key)) continue;
           desiredKeys.add(key);
-
           const content = medicationNotificationContent(medication.id, time, { notificationKey: key });
           if (!content) continue;
-
           await Notifications.scheduleNotificationAsync({
             content,
             trigger: {
@@ -237,6 +274,7 @@ export async function getMedicationReminderDiagnostics() {
   return {
     totalManaged: managed.length,
     recurring: managed.filter((request) => request.content.data?.kind === 'recurring').length,
+    dated: managed.filter((request) => request.content.data?.kind === 'dated').length,
     snoozed: managed.filter((request) => request.content.data?.kind === 'snooze').length,
   };
 }
