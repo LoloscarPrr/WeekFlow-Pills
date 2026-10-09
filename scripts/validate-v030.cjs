@@ -17,16 +17,20 @@ assert.match(notifications, /kind === 'snooze'/);
 assert.match(notifications, /seconds: 10 \* 60/);
 assert.match(notifications, /duplicateSnooze/);
 assert.match(notifications, /managedBy: MANAGED_BY/);
+assert.match(notifications, /kind === 'dated'/);
+assert.match(notifications, /SchedulableTriggerInputTypes\.DATE/);
 
 // H — Migración segura desde 0.2.0 y configuración Android esperada.
 assert.match(data, /schedule_mode TEXT NOT NULL DEFAULT 'fixed'/);
 assert.match(data, /ALTER TABLE medications ADD COLUMN schedule_mode TEXT NOT NULL DEFAULT 'fixed'/);
 assert.match(data, /ALTER TABLE medications ADD COLUMN interval_hours INTEGER/);
 assert.match(data, /ALTER TABLE medications ADD COLUMN start_time TEXT/);
+assert.match(data, /ALTER TABLE medications ADD COLUMN start_date TEXT NOT NULL DEFAULT '1970-01-01'/);
+assert.match(data, /ALTER TABLE medications ADD COLUMN end_date TEXT/);
 assert.equal(appConfig.expo.version, '0.3.4');
 assert.equal(appConfig.expo.android.versionCode, 7);
 assert.equal(appConfig.expo.android.package, 'com.weekflow.pills');
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.SCHEDULE_EXACT_ALARM'));
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.RECEIVE_BOOT_COMPLETED'));
 
-console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phase 4.3 reminders: OK');
+console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3/4.4: OK');
