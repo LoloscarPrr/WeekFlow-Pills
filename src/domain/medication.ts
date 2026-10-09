@@ -17,6 +17,7 @@ export type Medication = {
   stock: number | null;
   lowStockThreshold: number;
   active: boolean;
+  archived: boolean;
   createdAt?: string;
 };
 
