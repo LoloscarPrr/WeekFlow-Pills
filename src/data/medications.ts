@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import type { DoseOccurrence, HistoryEntry, IntakeStatus, Medication, ScheduleMode } from '@/src/domain/medication';
-import { isUnresolvedDose, localDateKey, resolveMedicationTimes } from '@/src/domain/medication';
+import { isUnresolvedDose, localDateKey, medicationRunsOnDate, resolveMedicationTimes } from '@/src/domain/medication';
 
 const db = SQLite.openDatabaseSync('weekflow-pills.db');
 
@@ -28,6 +28,12 @@ function ensureMedicationScheduleColumns() {
   if (!names.has('start_time')) {
     db.execSync('ALTER TABLE medications ADD COLUMN start_time TEXT;');
   }
+  if (!names.has('start_date')) {
+    db.execSync("ALTER TABLE medications ADD COLUMN start_date TEXT NOT NULL DEFAULT '1970-01-01';");
+  }
+  if (!names.has('end_date')) {
+    db.execSync('ALTER TABLE medications ADD COLUMN end_date TEXT;');
+  }
 
   db.execSync(`
     UPDATE medications
@@ -52,6 +58,8 @@ export function ensureDatabase() {
       schedule_mode TEXT NOT NULL DEFAULT 'fixed',
       interval_hours INTEGER,
       start_time TEXT,
+      start_date TEXT NOT NULL DEFAULT '1970-01-01',
+      end_date TEXT,
       stock INTEGER,
       low_stock_threshold INTEGER NOT NULL DEFAULT 5,
       active INTEGER NOT NULL DEFAULT 1,
@@ -103,6 +111,8 @@ type MedicationRow = {
   schedule_mode: string;
   interval_hours: number | null;
   start_time: string | null;
+  start_date: string;
+  end_date: string | null;
   stock: number | null;
   low_stock_threshold: number;
   active: number;
@@ -121,6 +131,8 @@ function mapMedication(row: MedicationRow): Medication {
     scheduleMode,
     intervalHours: scheduleMode === 'interval' ? row.interval_hours : null,
     startTime: scheduleMode === 'interval' ? row.start_time : null,
+    startDate: row.start_date,
+    endDate: row.end_date,
     stock: row.stock,
     lowStockThreshold: row.low_stock_threshold,
     active: row.active === 1,
@@ -130,7 +142,7 @@ function mapMedication(row: MedicationRow): Medication {
 
 const medicationSelect = `
   SELECT id, name, dose, instructions, times_json, days_json,
-         schedule_mode, interval_hours, start_time,
+         schedule_mode, interval_hours, start_time, start_date, end_date,
          stock, low_stock_threshold, active, created_at
   FROM medications
 `;
@@ -160,8 +172,8 @@ export function addMedication(input: Omit<Medication, 'id' | 'active'>) {
   db.runSync(
     `INSERT INTO medications
       (name, dose, instructions, times_json, days_json, schedule_mode, interval_hours, start_time,
-       stock, low_stock_threshold, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+       start_date, end_date, stock, low_stock_threshold, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
     input.name.trim(),
     input.dose.trim(),
     input.instructions.trim(),
@@ -170,6 +182,8 @@ export function addMedication(input: Omit<Medication, 'id' | 'active'>) {
     input.scheduleMode,
     input.intervalHours,
     input.startTime,
+    input.startDate,
+    input.endDate,
     input.stock,
     input.lowStockThreshold,
     new Date().toISOString(),
@@ -182,7 +196,7 @@ export function updateMedication(input: Medication) {
     `UPDATE medications
      SET name = ?, dose = ?, instructions = ?, times_json = ?, days_json = ?,
          schedule_mode = ?, interval_hours = ?, start_time = ?,
-         stock = ?, low_stock_threshold = ?, active = ?
+         start_date = ?, end_date = ?, stock = ?, low_stock_threshold = ?, active = ?
      WHERE id = ?`,
     input.name.trim(),
     input.dose.trim(),
@@ -192,6 +206,8 @@ export function updateMedication(input: Medication) {
     input.scheduleMode,
     input.intervalHours,
     input.startTime,
+    input.startDate,
+    input.endDate,
     input.stock,
     input.lowStockThreshold,
     input.active ? 1 : 0,
@@ -224,9 +240,8 @@ function createdOnOrBefore(medication: Medication, dateKey: string) {
 export function listDosesForDate(date: Date): DoseOccurrence[] {
   ensureDatabase();
   const dateKey = localDateKey(date);
-  const weekday = date.getDay();
   const meds = listMedications(false).filter(
-    (medication) => medication.days.includes(weekday) && createdOnOrBefore(medication, dateKey),
+    (medication) => medicationRunsOnDate(medication, date) && createdOnOrBefore(medication, dateKey),
   );
   const rows = db.getAllSync<IntakeRow>(
     'SELECT medication_id, scheduled_time, status, recorded_at FROM intakes WHERE scheduled_date = ?',
