@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Medication, ScheduleMode } from '@/src/domain/medication';
 import {
@@ -16,9 +16,11 @@ import {
 } from '@/src/domain/medication';
 import {
   addMedication,
+  listArchivedMedications,
   listLastTakenByMedication,
   listMedications,
   setMedicationActive,
+  setMedicationArchived,
   setMedicationStock,
   updateMedication,
   type LastTaken,
@@ -42,6 +44,7 @@ function prettyDate(dateKey: string) {
 export default function MedicationsScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [medications, setMedications] = useState<Medication[]>([]);
+  const [archivedMedications, setArchivedMedications] = useState<Medication[]>([]);
   const [lastTaken, setLastTaken] = useState<Record<number, LastTaken>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState('');
@@ -59,6 +62,7 @@ export default function MedicationsScreen() {
 
   const refresh = () => {
     setMedications(listMedications());
+    setArchivedMedications(listArchivedMedications());
     setLastTaken(listLastTakenByMedication());
   };
 
@@ -129,6 +133,7 @@ export default function MedicationsScreen() {
         stock: null,
         lowStockThreshold: 5,
         active: true,
+        archived: false,
       };
       const from = new Date();
       if (range.startDate > localDateKey(from)) {
@@ -217,6 +222,38 @@ export default function MedicationsScreen() {
     setMedicationActive(medication.id, !medication.active);
     refresh();
     await syncMedicationNotifications().catch(() => undefined);
+    setMessage(medication.active
+      ? `${medication.name} quedó pausado. Sus recordatorios futuros fueron cancelados.`
+      : `${medication.name} volvió a estar activo y sus recordatorios fueron restaurados.`);
+  };
+
+  const archiveMedication = (medication: Medication) => {
+    Alert.alert(
+      'Archivar medicamento',
+      `${medication.name} dejará de aparecer entre los tratamientos activos y no generará nuevos recordatorios. Su historial se conservará.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Archivar',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setMedicationArchived(medication.id, true);
+              refresh();
+              await syncMedicationNotifications().catch(() => undefined);
+              setMessage(`${medication.name} fue archivado. El historial sigue guardado.`);
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const restoreMedication = async (medication: Medication) => {
+    setMedicationArchived(medication.id, false);
+    refresh();
+    await syncMedicationNotifications().catch(() => undefined);
+    setMessage(`${medication.name} fue restaurado y quedó activo nuevamente.`);
   };
 
   const adjustStock = (medication: Medication, delta: number) => {
@@ -347,9 +384,34 @@ export default function MedicationsScreen() {
                   <Action label="Editar" onPress={() => beginEdit(medication)} />
                   <Action label={medication.active ? 'Pausar' : 'Reanudar'} onPress={() => toggleActive(medication)} />
                 </View>
+                <Pressable style={s.archiveAction} onPress={() => archiveMedication(medication)}>
+                  <Text style={s.archiveActionText}>Archivar medicamento</Text>
+                </Pressable>
               </View>
             );
           }) : <Text style={s.help}>Aún no hay medicamentos configurados.</Text>}
+
+          {archivedMedications.length ? (
+            <>
+              <Text style={s.section}>ARCHIVADOS</Text>
+              <Text style={s.archiveHelp}>No generan recordatorios, pero su historial y sus datos siguen guardados.</Text>
+              {archivedMedications.map((medication) => (
+                <View key={medication.id} style={[s.med, s.archivedCard]}>
+                  <View style={s.medTop}>
+                    <View style={s.flex}>
+                      <Text style={s.medName}>{medication.name}</Text>
+                      <Text style={s.medDose}>{medication.dose}</Text>
+                    </View>
+                    <Text style={s.archivedBadge}>Archivado</Text>
+                  </View>
+                  <Text style={s.last}>{lastTakenText(lastTaken[medication.id])}</Text>
+                  <Pressable style={s.restoreAction} onPress={() => void restoreMedication(medication)}>
+                    <Text style={s.restoreActionText}>Restaurar y reactivar</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -371,5 +433,6 @@ const s = StyleSheet.create({
   preview:{backgroundColor:'#0B182C',borderWidth:1,borderColor:'#1F3D61',borderRadius:15,padding:13,marginBottom:16},previewLabel:{color:'#86DCC2',fontSize:10,fontWeight:'900',letterSpacing:1.5},previewText:{color:colors.text,fontSize:13,lineHeight:20,fontWeight:'800',marginTop:5},error:{color:'#FF9AA4',fontSize:12,lineHeight:18,marginTop:6},
   days:{flexDirection:'row',gap:6},day:{flex:1,minHeight:42,borderRadius:12,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center'},dayOn:{backgroundColor:'#12315A',borderColor:colors.blue},dayText:{color:colors.muted,fontWeight:'900'},dayTextOn:{color:colors.text},message:{color:'#B6CBE7',fontSize:12,lineHeight:18,marginBottom:12},save:{minHeight:52,backgroundColor:colors.blue,borderRadius:16,alignItems:'center',justifyContent:'center'},saveText:{color:'#fff',fontSize:15,fontWeight:'900'},section:{color:'#76AFFF',fontSize:13,fontWeight:'900',letterSpacing:3,marginTop:30,marginBottom:11},
   med:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.line,borderRadius:22,padding:17,marginBottom:11},paused:{opacity:.68},medTop:{flexDirection:'row',alignItems:'flex-start',gap:10},medName:{color:colors.text,fontSize:18,fontWeight:'900'},medDose:{color:'#B7C8DF',fontSize:13,fontWeight:'800',marginTop:4},active:{color:'#7DE1C1',fontSize:10,fontWeight:'900',backgroundColor:'#103B35',paddingHorizontal:9,paddingVertical:6,borderRadius:999},inactive:{color:'#E7C77C',fontSize:10,fontWeight:'900',backgroundColor:'#332D22',paddingHorizontal:9,paddingVertical:6,borderRadius:999},medMode:{color:'#D8C3F4',fontSize:11,fontWeight:'900',marginTop:12},medMeta:{color:'#76AFFF',fontSize:12,fontWeight:'800',marginTop:5},duration:{color:'#C5D5E9',fontSize:11,fontWeight:'800',marginTop:6},last:{color:'#7DE1C1',fontSize:11,fontWeight:'800',marginTop:7},
-  stock:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:14,paddingTop:13,borderTopWidth:1,borderTopColor:colors.line},stockText:{color:colors.text,fontSize:14,fontWeight:'900'},stockLow:{color:colors.warning,fontSize:14,fontWeight:'900'},small:{width:42,height:42,borderRadius:13,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center'},smallText:{color:colors.text,fontSize:22,fontWeight:'800'},action:{flex:1,minHeight:44,borderRadius:13,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center',marginTop:13},actionText:{color:'#A9CFFF',fontSize:12,fontWeight:'900'}
+  stock:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:14,paddingTop:13,borderTopWidth:1,borderTopColor:colors.line},stockText:{color:colors.text,fontSize:14,fontWeight:'900'},stockLow:{color:colors.warning,fontSize:14,fontWeight:'900'},small:{width:42,height:42,borderRadius:13,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center'},smallText:{color:colors.text,fontSize:22,fontWeight:'800'},action:{flex:1,minHeight:44,borderRadius:13,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center',marginTop:13},actionText:{color:'#A9CFFF',fontSize:12,fontWeight:'900'},
+  archiveAction:{minHeight:42,borderRadius:13,borderWidth:1,borderColor:'#5B3440',alignItems:'center',justifyContent:'center',marginTop:9},archiveActionText:{color:'#FF9AA4',fontSize:12,fontWeight:'900'},archiveHelp:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:-4,marginBottom:10},archivedCard:{opacity:.78,borderColor:'#3D3652'},archivedBadge:{color:'#C7B5DD',fontSize:10,fontWeight:'900',backgroundColor:'#2A2236',paddingHorizontal:9,paddingVertical:6,borderRadius:999},restoreAction:{minHeight:44,borderRadius:13,borderWidth:1,borderColor:'#315F8E',alignItems:'center',justifyContent:'center',marginTop:13},restoreActionText:{color:'#8FC0FF',fontSize:12,fontWeight:'900'}
 });
