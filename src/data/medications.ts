@@ -34,6 +34,9 @@ function ensureMedicationScheduleColumns() {
   if (!names.has('end_date')) {
     db.execSync('ALTER TABLE medications ADD COLUMN end_date TEXT;');
   }
+  if (!names.has('archived')) {
+    db.execSync('ALTER TABLE medications ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
+  }
 
   db.execSync(`
     UPDATE medications
@@ -63,6 +66,7 @@ export function ensureDatabase() {
       stock INTEGER,
       low_stock_threshold INTEGER NOT NULL DEFAULT 5,
       active INTEGER NOT NULL DEFAULT 1,
+      archived INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
 
@@ -116,6 +120,7 @@ type MedicationRow = {
   stock: number | null;
   low_stock_threshold: number;
   active: number;
+  archived: number;
   created_at: string;
 };
 
@@ -136,6 +141,7 @@ function mapMedication(row: MedicationRow): Medication {
     stock: row.stock,
     lowStockThreshold: row.low_stock_threshold,
     active: row.active === 1,
+    archived: row.archived === 1,
     createdAt: row.created_at,
   };
 }
@@ -143,7 +149,7 @@ function mapMedication(row: MedicationRow): Medication {
 const medicationSelect = `
   SELECT id, name, dose, instructions, times_json, days_json,
          schedule_mode, interval_hours, start_time, start_date, end_date,
-         stock, low_stock_threshold, active, created_at
+         stock, low_stock_threshold, active, archived, created_at
   FROM medications
 `;
 
@@ -151,10 +157,20 @@ export function listMedications(includeInactive = true): Medication[] {
   ensureDatabase();
   const rows = db.getAllSync<MedicationRow>(
     `${medicationSelect}
-     ${includeInactive ? '' : 'WHERE active = 1'}
+     WHERE archived = 0
+       ${includeInactive ? '' : 'AND active = 1'}
      ORDER BY active DESC, name COLLATE NOCASE ASC`,
   );
   return rows.map(mapMedication);
+}
+
+export function listArchivedMedications(): Medication[] {
+  ensureDatabase();
+  return db.getAllSync<MedicationRow>(
+    `${medicationSelect}
+     WHERE archived = 1
+     ORDER BY name COLLATE NOCASE ASC`,
+  ).map(mapMedication);
 }
 
 export function getMedicationById(id: number): Medication | null {
@@ -167,13 +183,13 @@ export function getMedicationById(id: number): Medication | null {
   return row ? mapMedication(row) : null;
 }
 
-export function addMedication(input: Omit<Medication, 'id' | 'active'>) {
+export function addMedication(input: Omit<Medication, 'id' | 'active' | 'archived'>) {
   ensureDatabase();
   db.runSync(
     `INSERT INTO medications
       (name, dose, instructions, times_json, days_json, schedule_mode, interval_hours, start_time,
-       start_date, end_date, stock, low_stock_threshold, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+       start_date, end_date, stock, low_stock_threshold, active, archived, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)`,
     input.name.trim(),
     input.dose.trim(),
     input.instructions.trim(),
@@ -196,7 +212,7 @@ export function updateMedication(input: Medication) {
     `UPDATE medications
      SET name = ?, dose = ?, instructions = ?, times_json = ?, days_json = ?,
          schedule_mode = ?, interval_hours = ?, start_time = ?,
-         start_date = ?, end_date = ?, stock = ?, low_stock_threshold = ?, active = ?
+         start_date = ?, end_date = ?, stock = ?, low_stock_threshold = ?, active = ?, archived = ?
      WHERE id = ?`,
     input.name.trim(),
     input.dose.trim(),
@@ -211,13 +227,28 @@ export function updateMedication(input: Medication) {
     input.stock,
     input.lowStockThreshold,
     input.active ? 1 : 0,
+    input.archived ? 1 : 0,
     input.id,
   );
 }
 
 export function setMedicationActive(id: number, active: boolean) {
   ensureDatabase();
-  db.runSync('UPDATE medications SET active = ? WHERE id = ?', active ? 1 : 0, id);
+  db.runSync(
+    'UPDATE medications SET active = ? WHERE id = ? AND archived = 0',
+    active ? 1 : 0,
+    id,
+  );
+}
+
+export function setMedicationArchived(id: number, archived: boolean) {
+  ensureDatabase();
+  db.runSync(
+    'UPDATE medications SET archived = ?, active = ? WHERE id = ?',
+    archived ? 1 : 0,
+    archived ? 0 : 1,
+    id,
+  );
 }
 
 export function setMedicationStock(id: number, stock: number | null) {
