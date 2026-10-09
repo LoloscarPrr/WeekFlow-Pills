@@ -6,6 +6,9 @@ const {
   normalizeTimes,
   resolveMedicationTimes,
   scheduledDateTime,
+  medicationRunsOnDate,
+  upcomingMedicationOccurrences,
+  validateMedicationDateRange,
 } = require('../.tmp-tests/medication.js');
 
 function medication(overrides = {}) {
@@ -19,6 +22,8 @@ function medication(overrides = {}) {
     scheduleMode: 'fixed',
     intervalHours: null,
     startTime: null,
+    startDate: '2026-10-08',
+    endDate: null,
     stock: null,
     lowStockThreshold: 5,
     active: true,
@@ -80,4 +85,28 @@ assert.throws(() => generateTimesFromInterval('09:00', 25));
 assert.throws(() => generateTimesFromInterval('25:00', 6));
 assert.throws(() => scheduledDateTime('2026-02-31', '09:00'));
 
-console.log('WeekFlow Pills scheduling + Phase 4.1 timing tests: OK');
+console.log('WeekFlow Pills scheduling + Phases 4.1/4.4 tests: OK');
+
+
+// Fase 4.4 — duración y vista previa de programación.
+const ranged = medication({
+  times: ['09:00', '21:00'],
+  startDate: '2026-10-10',
+  endDate: '2026-10-12',
+});
+assert.equal(medicationRunsOnDate(ranged, new Date(2026, 9, 9, 9, 0, 0)), false);
+assert.equal(medicationRunsOnDate(ranged, new Date(2026, 9, 10, 9, 0, 0)), true);
+assert.equal(medicationRunsOnDate(ranged, new Date(2026, 9, 13, 9, 0, 0)), false);
+assert.deepEqual(validateMedicationDateRange('2026-10-10', '2026-10-12'), {
+  startDate: '2026-10-10',
+  endDate: '2026-10-12',
+});
+assert.throws(() => validateMedicationDateRange('2026-10-12', '2026-10-10'));
+
+const preview = upcomingMedicationOccurrences(ranged, new Date(2026, 9, 10, 8, 0, 0), 4);
+assert.deepEqual(preview, [
+  { date: '2026-10-10', time: '09:00' },
+  { date: '2026-10-10', time: '21:00' },
+  { date: '2026-10-11', time: '09:00' },
+  { date: '2026-10-11', time: '21:00' },
+]);
