@@ -31,8 +31,10 @@ export type DoseOccurrence = {
 
 export type HistoryEntry = {
   id: number;
+  medicationId: number;
   medicationName: string;
   dose: string;
+  instructions: string;
   scheduledDate: string;
   scheduledTime: string;
   status: IntakeStatus;
