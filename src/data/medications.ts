@@ -15,6 +15,35 @@ export type LastTaken = {
   recordedAt: string;
 };
 
+function ensureIntakeSnapshotColumns() {
+  const columns = db.getAllSync<{ name: string }>('PRAGMA table_info(intakes)');
+  const names = new Set(columns.map((column) => column.name));
+
+  if (!names.has('medication_name_snapshot')) {
+    db.execSync('ALTER TABLE intakes ADD COLUMN medication_name_snapshot TEXT;');
+  }
+  if (!names.has('dose_snapshot')) {
+    db.execSync('ALTER TABLE intakes ADD COLUMN dose_snapshot TEXT;');
+  }
+  if (!names.has('instructions_snapshot')) {
+    db.execSync("ALTER TABLE intakes ADD COLUMN instructions_snapshot TEXT NOT NULL DEFAULT '';");
+  }
+
+  db.execSync(`
+    UPDATE intakes
+    SET medication_name_snapshot = (
+      SELECT m.name FROM medications m WHERE m.id = intakes.medication_id
+    )
+    WHERE medication_name_snapshot IS NULL;
+
+    UPDATE intakes
+    SET dose_snapshot = (
+      SELECT m.dose FROM medications m WHERE m.id = intakes.medication_id
+    )
+    WHERE dose_snapshot IS NULL;
+  `);
+}
+
 function ensureMedicationScheduleColumns() {
   const columns = db.getAllSync<{ name: string }>('PRAGMA table_info(medications)');
   const names = new Set(columns.map((column) => column.name));
@@ -77,6 +106,9 @@ export function ensureDatabase() {
       scheduled_time TEXT NOT NULL,
       status TEXT NOT NULL CHECK(status IN ('taken','skipped')),
       recorded_at TEXT NOT NULL,
+      medication_name_snapshot TEXT,
+      dose_snapshot TEXT,
+      instructions_snapshot TEXT NOT NULL DEFAULT '',
       UNIQUE(medication_id, scheduled_date, scheduled_time),
       FOREIGN KEY(medication_id) REFERENCES medications(id)
     );
@@ -102,6 +134,7 @@ export function ensureDatabase() {
   `);
 
   ensureMedicationScheduleColumns();
+  ensureIntakeSnapshotColumns();
   initialized = true;
 }
 
@@ -385,15 +418,29 @@ export function recordIntake(occurrence: DoseOccurrence, status: IntakeStatus): 
   );
 
   db.runSync(
-    `INSERT INTO intakes (medication_id, scheduled_date, scheduled_time, status, recorded_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO intakes (
+       medication_id, scheduled_date, scheduled_time, status, recorded_at,
+       medication_name_snapshot, dose_snapshot, instructions_snapshot
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(medication_id, scheduled_date, scheduled_time)
-     DO UPDATE SET status = excluded.status, recorded_at = excluded.recorded_at`,
+     DO UPDATE SET
+       status = excluded.status,
+       recorded_at = excluded.recorded_at,
+       medication_name_snapshot = COALESCE(intakes.medication_name_snapshot, excluded.medication_name_snapshot),
+       dose_snapshot = COALESCE(intakes.dose_snapshot, excluded.dose_snapshot),
+       instructions_snapshot = CASE
+         WHEN intakes.instructions_snapshot = '' THEN excluded.instructions_snapshot
+         ELSE intakes.instructions_snapshot
+       END`,
     occurrence.medication.id,
     occurrence.scheduledDate,
     occurrence.scheduledTime,
     status,
     now,
+    occurrence.medication.name,
+    occurrence.medication.dose,
+    occurrence.medication.instructions,
   );
 
   return existing ? 'updated' : 'created';
@@ -445,8 +492,10 @@ export function markNotificationActionHandled(actionKey: string): boolean {
 
 type HistoryRow = {
   id: number;
+  medication_id: number;
   medication_name: string;
   dose: string;
+  instructions: string;
   scheduled_date: string;
   scheduled_time: string;
   status: IntakeStatus;
@@ -456,19 +505,45 @@ type HistoryRow = {
 export function listHistory(limit = 100): HistoryEntry[] {
   ensureDatabase();
   return db.getAllSync<HistoryRow>(
-    `SELECT i.id, m.name AS medication_name, m.dose, i.scheduled_date, i.scheduled_time, i.status, i.recorded_at
+    `SELECT
+       i.id,
+       i.medication_id,
+       COALESCE(i.medication_name_snapshot, m.name) AS medication_name,
+       COALESCE(i.dose_snapshot, m.dose) AS dose,
+       COALESCE(i.instructions_snapshot, m.instructions, '') AS instructions,
+       i.scheduled_date,
+       i.scheduled_time,
+       i.status,
+       i.recorded_at
      FROM intakes i
      JOIN medications m ON m.id = i.medication_id
-     ORDER BY i.recorded_at DESC
+     ORDER BY i.scheduled_date DESC, i.scheduled_time DESC, i.recorded_at DESC
      LIMIT ?`,
     limit,
   ).map((row) => ({
     id: row.id,
+    medicationId: row.medication_id,
     medicationName: row.medication_name,
     dose: row.dose,
+    instructions: row.instructions,
     scheduledDate: row.scheduled_date,
     scheduledTime: row.scheduled_time,
     status: row.status,
     recordedAt: row.recorded_at,
   }));
+}
+
+
+export function correctHistoryEntry(entry: HistoryEntry, status: IntakeStatus): IntakeWriteResult {
+  ensureDatabase();
+  const medication = getMedicationById(entry.medicationId);
+  if (!medication) throw new Error('No se encontró el medicamento asociado a este registro.');
+
+  return recordIntake({
+    medication,
+    scheduledDate: entry.scheduledDate,
+    scheduledTime: entry.scheduledTime,
+    status: entry.status,
+    recordedAt: entry.recordedAt,
+  }, status);
 }
