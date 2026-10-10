@@ -31,10 +31,16 @@ assert.match(data, /ALTER TABLE medications ADD COLUMN archived INTEGER NOT NULL
 assert.match(data, /WHERE archived = 0/);
 assert.match(data, /WHERE archived = 1/);
 assert.match(data, /SET archived = \?, active = \?/);
+assert.match(data, /ALTER TABLE intakes ADD COLUMN medication_name_snapshot TEXT/);
+assert.match(data, /ALTER TABLE intakes ADD COLUMN dose_snapshot TEXT/);
+assert.match(data, /ALTER TABLE intakes ADD COLUMN instructions_snapshot TEXT NOT NULL DEFAULT ''/);
+assert.match(data, /medication_name_snapshot = COALESCE/);
+assert.match(data, /dose_snapshot = COALESCE/);
+assert.match(data, /correctHistoryEntry/);
 assert.equal(appConfig.expo.version, '0.3.4');
 assert.equal(appConfig.expo.android.versionCode, 7);
 assert.equal(appConfig.expo.android.package, 'com.weekflow.pills');
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.SCHEDULE_EXACT_ALARM'));
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.RECEIVE_BOOT_COMPLETED'));
 
-console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3/4.4/4.5: OK');
+console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3/4.4/4.5/4.6: OK');
