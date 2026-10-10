@@ -37,10 +37,17 @@ assert.match(data, /ALTER TABLE intakes ADD COLUMN instructions_snapshot TEXT NO
 assert.match(data, /medication_name_snapshot = COALESCE/);
 assert.match(data, /dose_snapshot = COALESCE/);
 assert.match(data, /correctHistoryEntry/);
+assert.match(data, /CREATE TABLE IF NOT EXISTS stock_movements/);
+assert.match(data, /reason TEXT NOT NULL CHECK\(reason IN \('intake','correction','refill','manual'\)\)/);
+assert.match(data, /listStockMovements/);
+assert.match(data, /addMedicationStock/);
+assert.match(data, /setMedicationLowStockThreshold/);
+assert.match(data, /Math\.max\(0, currentStock - 1\)/);
+assert.match(data, /writeStockMovement/);
 assert.equal(appConfig.expo.version, '0.3.4');
 assert.equal(appConfig.expo.android.versionCode, 7);
 assert.equal(appConfig.expo.android.package, 'com.weekflow.pills');
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.SCHEDULE_EXACT_ALARM'));
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.RECEIVE_BOOT_COMPLETED'));
 
-console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3/4.4/4.5/4.6: OK');
+console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3–4.7: OK');
