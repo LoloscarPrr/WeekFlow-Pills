@@ -8,6 +8,16 @@ let initialized = false;
 
 export type IntakeWriteResult = 'created' | 'updated' | 'unchanged';
 
+export type StockMovement = {
+  id: number;
+  medicationId: number;
+  delta: number;
+  balanceAfter: number;
+  reason: 'intake' | 'correction' | 'refill' | 'manual';
+  note: string;
+  createdAt: string;
+};
+
 export type LastTaken = {
   medicationId: number;
   scheduledDate: string;
@@ -129,8 +139,20 @@ export function ensureDatabase() {
       handled_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      medication_id INTEGER NOT NULL,
+      delta INTEGER NOT NULL,
+      balance_after INTEGER NOT NULL,
+      reason TEXT NOT NULL CHECK(reason IN ('intake','correction','refill','manual')),
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(medication_id) REFERENCES medications(id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_intakes_date ON intakes(scheduled_date);
     CREATE INDEX IF NOT EXISTS idx_intakes_medication_status ON intakes(medication_id, status, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_stock_movements_medication ON stock_movements(medication_id, created_at);
   `);
 
   ensureMedicationScheduleColumns();
@@ -284,9 +306,86 @@ export function setMedicationArchived(id: number, archived: boolean) {
   );
 }
 
-export function setMedicationStock(id: number, stock: number | null) {
+function writeStockMovement(
+  medicationId: number,
+  delta: number,
+  balanceAfter: number,
+  reason: StockMovement['reason'],
+  note = '',
+) {
+  db.runSync(
+    `INSERT INTO stock_movements
+      (medication_id, delta, balance_after, reason, note, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    medicationId,
+    delta,
+    balanceAfter,
+    reason,
+    note,
+    new Date().toISOString(),
+  );
+}
+
+export function setMedicationStock(id: number, stock: number | null, reason: StockMovement['reason'] = 'manual', note = '') {
   ensureDatabase();
+  const current = getMedicationById(id);
+  if (!current) throw new Error('Medicamento no encontrado.');
+
+  if (stock === null) {
+    db.runSync('UPDATE medications SET stock = NULL WHERE id = ?', id);
+    return;
+  }
+
+  if (!Number.isInteger(stock) || stock < 0) throw new Error('El stock debe ser un entero igual o mayor que 0.');
+
+  const previous = current.stock ?? 0;
   db.runSync('UPDATE medications SET stock = ? WHERE id = ?', stock, id);
+  writeStockMovement(id, stock - previous, stock, reason, note);
+}
+
+export function addMedicationStock(id: number, amount: number, note = '') {
+  ensureDatabase();
+  if (!Number.isInteger(amount) || amount <= 0) throw new Error('La reposición debe ser un entero mayor que 0.');
+  const medication = getMedicationById(id);
+  if (!medication || medication.stock === null) throw new Error('El control de stock no está activo para este medicamento.');
+  const next = medication.stock + amount;
+  db.runSync('UPDATE medications SET stock = ? WHERE id = ?', next, id);
+  writeStockMovement(id, amount, next, 'refill', note);
+}
+
+export function setMedicationLowStockThreshold(id: number, threshold: number) {
+  ensureDatabase();
+  if (!Number.isInteger(threshold) || threshold < 0) throw new Error('El umbral debe ser un entero igual o mayor que 0.');
+  db.runSync('UPDATE medications SET low_stock_threshold = ? WHERE id = ?', threshold, id);
+}
+
+export function listStockMovements(medicationId: number, limit = 20): StockMovement[] {
+  ensureDatabase();
+  return db.getAllSync<{
+    id: number;
+    medication_id: number;
+    delta: number;
+    balance_after: number;
+    reason: StockMovement['reason'];
+    note: string;
+    created_at: string;
+  }>(
+    `SELECT id, medication_id, delta, balance_after, reason, note, created_at
+     FROM stock_movements
+     WHERE medication_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    medicationId,
+    limit,
+  ).map((row) => ({
+    id: row.id,
+    medicationId: row.medication_id,
+    delta: row.delta,
+    balanceAfter: row.balance_after,
+    reason: row.reason,
+    note: row.note,
+    createdAt: row.created_at,
+  }));
 }
 
 type IntakeRow = {
@@ -391,15 +490,33 @@ export function recordIntake(occurrence: DoseOccurrence, status: IntakeStatus): 
 
   if (occurrence.medication.stock !== null) {
     if (status === 'taken' && existing?.status !== 'taken') {
-      db.runSync(
-        'UPDATE medications SET stock = MAX(stock - 1, 0) WHERE id = ? AND stock IS NOT NULL',
-        occurrence.medication.id,
-      );
+      const currentStock = getMedicationById(occurrence.medication.id)?.stock;
+      if (currentStock !== null && currentStock !== undefined) {
+        const nextStock = Math.max(0, currentStock - 1);
+        db.runSync('UPDATE medications SET stock = ? WHERE id = ?', nextStock, occurrence.medication.id);
+        if (nextStock !== currentStock) {
+          writeStockMovement(
+            occurrence.medication.id,
+            -1,
+            nextStock,
+            'intake',
+            `Toma ${occurrence.scheduledDate} ${occurrence.scheduledTime}`,
+          );
+        }
+      }
     } else if (status !== 'taken' && existing?.status === 'taken') {
-      db.runSync(
-        'UPDATE medications SET stock = stock + 1 WHERE id = ? AND stock IS NOT NULL',
-        occurrence.medication.id,
-      );
+      const currentStock = getMedicationById(occurrence.medication.id)?.stock;
+      if (currentStock !== null && currentStock !== undefined) {
+        const nextStock = currentStock + 1;
+        db.runSync('UPDATE medications SET stock = ? WHERE id = ?', nextStock, occurrence.medication.id);
+        writeStockMovement(
+          occurrence.medication.id,
+          1,
+          nextStock,
+          'correction',
+          `Corrección de toma ${occurrence.scheduledDate} ${occurrence.scheduledTime}`,
+        );
+      }
     }
   }
 
