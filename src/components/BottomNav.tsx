@@ -22,8 +22,11 @@ export function BottomNav() {
             key={item.path}
             style={styles.item}
             onPress={() => router.replace(item.path)}
-            accessibilityRole="button"
+            accessibilityRole="tab"
+            accessibilityLabel={item.label}
+            accessibilityHint={active ? 'Pestaña actual' : `Abre ${item.label}`}
             accessibilityState={{ selected: active }}
+            hitSlop={6}
           >
             <Text style={[styles.icon, active && styles.active]}>{item.icon}</Text>
             <Text style={[styles.label, active && styles.active]}>{item.label}</Text>
@@ -43,8 +46,8 @@ const styles = StyleSheet.create({
     paddingTop: 9,
     paddingHorizontal: 8,
   },
-  item: { flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  item: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 4 },
   icon: { color: colors.muted, fontSize: 19, fontWeight: '900' },
-  label: { color: colors.muted, fontSize: 11, fontWeight: '800' },
+  label: { color: colors.muted, fontSize: 12, fontWeight: '800', textAlign: 'center' },
   active: { color: '#76AFFF' },
 });
