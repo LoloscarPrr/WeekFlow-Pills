@@ -103,6 +103,9 @@ export default function HistoryScreen() {
           placeholder="Buscar medicamento"
           placeholderTextColor="#657793"
           style={styles.search}
+          accessibilityLabel="Buscar en el historial"
+          accessibilityHint="Filtra los registros por nombre de medicamento"
+          returnKeyType="search"
         />
 
         <View style={styles.filters}>
@@ -142,12 +145,18 @@ export default function HistoryScreen() {
                   <Pressable
                     style={[styles.action, item.status === 'taken' && styles.actionActiveTaken]}
                     onPress={() => correct(item, 'taken')}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Marcar registro de ${item.medicationName} como tomado`}
+                    accessibilityState={{ selected: item.status === 'taken' }}
                   >
                     <Text style={styles.actionText}>✓ Tomada</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.action, item.status === 'skipped' && styles.actionActiveSkipped]}
                     onPress={() => correct(item, 'skipped')}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Marcar registro de ${item.medicationName} como omitido`}
+                    accessibilityState={{ selected: item.status === 'skipped' }}
                   >
                     <Text style={styles.actionText}>Omitida</Text>
                   </Pressable>
@@ -173,7 +182,13 @@ export default function HistoryScreen() {
 
 function FilterButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable style={[styles.filter, active && styles.filterActive]} onPress={onPress}>
+    <Pressable
+      style={[styles.filter, active && styles.filterActive]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Filtrar historial: ${label}`}
+      accessibilityState={{ selected: active }}
+    >
       <Text style={[styles.filterText, active && styles.filterTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -188,13 +203,13 @@ const styles = StyleSheet.create({
   summary: { flexDirection: 'row', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 22, marginTop: 20, paddingVertical: 17 },
   stat: { flex: 1, alignItems: 'center' },
   statValue: { color: colors.text, fontSize: 24, fontWeight: '900' },
-  statLabel: { color: colors.muted, fontSize: 11, fontWeight: '800', marginTop: 4 },
+  statLabel: { color: colors.muted, fontSize: 12, fontWeight: '800', marginTop: 4 },
   divider: { width: 1, backgroundColor: colors.line },
   search: { minHeight: 50, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 15, paddingHorizontal: 14, color: colors.text, fontSize: 15, marginTop: 16 },
   filters: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  filter: { flex: 1, minHeight: 42, borderRadius: 13, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  filter: { flex: 1, minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   filterActive: { backgroundColor: '#12315A', borderColor: colors.blue },
-  filterText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
+  filterText: { color: colors.muted, fontSize: 12, fontWeight: '900' },
   filterTextActive: { color: colors.text },
   section: { color: '#76AFFF', fontSize: 13, fontWeight: '900', letterSpacing: 3, marginTop: 28, marginBottom: 12 },
   group: { marginBottom: 6 },
@@ -203,25 +218,25 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   timeBlock: { flexDirection: 'column' },
   time: { color: '#76AFFF', fontSize: 19, fontWeight: '900' },
-  scheduledLabel: { color: colors.muted, fontSize: 9, fontWeight: '800', marginTop: 1 },
-  status: { fontSize: 11, fontWeight: '900', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  scheduledLabel: { color: colors.muted, fontSize: 11, fontWeight: '800', marginTop: 1 },
+  status: { fontSize: 12, fontWeight: '900', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   taken: { color: '#7DE1C1', backgroundColor: '#103B35' },
   skipped: { color: '#FF9AA4', backgroundColor: '#3B2027' },
   name: { color: colors.text, fontSize: 17, fontWeight: '900', marginTop: 12 },
   dose: { color: '#B8C9E0', fontSize: 13, fontWeight: '800', marginTop: 3 },
-  instructions: { color: colors.muted, fontSize: 11, lineHeight: 17, marginTop: 6 },
+  instructions: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 6 },
   metaBox: { marginTop: 12, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  metaLabel: { color: colors.muted, fontSize: 10, fontWeight: '800' },
-  metaValue: { color: colors.text, fontSize: 10, fontWeight: '900', marginRight: 8 },
+  metaLabel: { color: colors.muted, fontSize: 11, fontWeight: '800' },
+  metaValue: { color: colors.text, fontSize: 11, fontWeight: '900', marginRight: 8 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 13 },
-  action: { flex: 1, minHeight: 42, borderRadius: 13, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  action: { flex: 1, minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   actionActiveTaken: { backgroundColor: '#103B35', borderColor: '#2F7567' },
   actionActiveSkipped: { backgroundColor: '#3B2027', borderColor: '#6E3742' },
-  actionText: { color: '#DDE7F4', fontSize: 11, fontWeight: '900' },
+  actionText: { color: '#DDE7F4', fontSize: 12, fontWeight: '900' },
   empty: { backgroundColor: colors.surface, borderRadius: 20, borderWidth: 1, borderColor: colors.line, padding: 18 },
   emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '900' },
   emptyCopy: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
   note: { marginTop: 22, backgroundColor: '#111C30', borderRadius: 18, padding: 15 },
   noteTitle: { color: '#C5D5E9', fontSize: 12, fontWeight: '900' },
-  noteCopy: { color: colors.muted, fontSize: 11, lineHeight: 17, marginTop: 4 },
+  noteCopy: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 4 },
 });
