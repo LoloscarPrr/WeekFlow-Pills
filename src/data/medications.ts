@@ -51,6 +51,12 @@ function ensureIntakeSnapshotColumns() {
       SELECT m.dose FROM medications m WHERE m.id = intakes.medication_id
     )
     WHERE dose_snapshot IS NULL;
+
+    UPDATE intakes
+    SET instructions_snapshot = (
+      SELECT m.instructions FROM medications m WHERE m.id = intakes.medication_id
+    )
+    WHERE instructions_snapshot = '';
   `);
 }
 
@@ -546,10 +552,7 @@ export function recordIntake(occurrence: DoseOccurrence, status: IntakeStatus): 
        recorded_at = excluded.recorded_at,
        medication_name_snapshot = COALESCE(intakes.medication_name_snapshot, excluded.medication_name_snapshot),
        dose_snapshot = COALESCE(intakes.dose_snapshot, excluded.dose_snapshot),
-       instructions_snapshot = CASE
-         WHEN intakes.instructions_snapshot = '' THEN excluded.instructions_snapshot
-         ELSE intakes.instructions_snapshot
-       END`,
+       instructions_snapshot = intakes.instructions_snapshot`,
     occurrence.medication.id,
     occurrence.scheduledDate,
     occurrence.scheduledTime,
@@ -723,7 +726,7 @@ function insertObjectRow(table: string, row: Record<string, unknown>) {
   const placeholders = entries.map(() => '?').join(', ');
   db.runSync(
     `INSERT INTO ${table} (${columns}) VALUES (${placeholders})`,
-    ...entries.map(([, value]) => value as SQLite.SQLiteBindValue),
+    ...entries.map(([, value]) => value as any),
   );
 }
 
