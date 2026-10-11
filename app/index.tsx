@@ -237,7 +237,7 @@ export default function TodayScreen() {
             <Text style={styles.brand}>WeekFlow</Text>
             <Text style={styles.brandSub}>PILLS</Text>
           </View>
-          <View style={styles.version} accessible accessibilityLabel="Versión 0.3.4"><Text style={styles.versionText}>v0.3.4</Text></View>
+          <View style={styles.version} accessible accessibilityLabel="Versión 0.4.0"><Text style={styles.versionText}>v0.4.0</Text></View>
         </View>
 
         <View style={styles.hero}>
