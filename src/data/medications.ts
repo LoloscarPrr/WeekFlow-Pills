@@ -664,3 +664,91 @@ export function correctHistoryEntry(entry: HistoryEntry, status: IntakeStatus): 
     recordedAt: entry.recordedAt,
   }, status);
 }
+
+
+export type WeekFlowPillsBackup = {
+  format: 'weekflow-pills-backup';
+  version: 1;
+  exportedAt: string;
+  tables: {
+    medications: Record<string, unknown>[];
+    intakes: Record<string, unknown>[];
+    intakeAudit: Record<string, unknown>[];
+    stockMovements: Record<string, unknown>[];
+    handledNotificationActions: Record<string, unknown>[];
+  };
+};
+
+function assertBackupTable(value: unknown, name: string): asserts value is Record<string, unknown>[] {
+  if (!Array.isArray(value)) throw new Error(`Respaldo inválido: falta la tabla ${name}.`);
+  if (!value.every((row) => row && typeof row === 'object' && !Array.isArray(row))) {
+    throw new Error(`Respaldo inválido: datos corruptos en ${name}.`);
+  }
+}
+
+export function exportLocalBackup(): WeekFlowPillsBackup {
+  ensureDatabase();
+  return {
+    format: 'weekflow-pills-backup',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    tables: {
+      medications: db.getAllSync<Record<string, unknown>>('SELECT * FROM medications ORDER BY id'),
+      intakes: db.getAllSync<Record<string, unknown>>('SELECT * FROM intakes ORDER BY id'),
+      intakeAudit: db.getAllSync<Record<string, unknown>>('SELECT * FROM intake_audit ORDER BY id'),
+      stockMovements: db.getAllSync<Record<string, unknown>>('SELECT * FROM stock_movements ORDER BY id'),
+      handledNotificationActions: db.getAllSync<Record<string, unknown>>('SELECT * FROM handled_notification_actions ORDER BY handled_at'),
+    },
+  };
+}
+
+export function validateLocalBackup(value: unknown): WeekFlowPillsBackup {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('El archivo no es un respaldo válido de WeekFlow Pills.');
+  const backup = value as Partial<WeekFlowPillsBackup>;
+  if (backup.format !== 'weekflow-pills-backup' || backup.version !== 1 || !backup.tables) {
+    throw new Error('Versión de respaldo no compatible.');
+  }
+  assertBackupTable(backup.tables.medications, 'medications');
+  assertBackupTable(backup.tables.intakes, 'intakes');
+  assertBackupTable(backup.tables.intakeAudit, 'intake_audit');
+  assertBackupTable(backup.tables.stockMovements, 'stock_movements');
+  assertBackupTable(backup.tables.handledNotificationActions, 'handled_notification_actions');
+  return backup as WeekFlowPillsBackup;
+}
+
+function insertObjectRow(table: string, row: Record<string, unknown>) {
+  const entries = Object.entries(row);
+  if (!entries.length) return;
+  const columns = entries.map(([key]) => `"${key.replace(/"/g, '""')}"`).join(', ');
+  const placeholders = entries.map(() => '?').join(', ');
+  db.runSync(
+    `INSERT INTO ${table} (${columns}) VALUES (${placeholders})`,
+    ...entries.map(([, value]) => value as SQLite.SQLiteBindValue),
+  );
+}
+
+export function restoreLocalBackup(input: unknown) {
+  ensureDatabase();
+  const backup = validateLocalBackup(input);
+
+  db.execSync('PRAGMA foreign_keys = OFF;');
+  try {
+    db.withTransactionSync(() => {
+      db.execSync(`
+        DELETE FROM handled_notification_actions;
+        DELETE FROM stock_movements;
+        DELETE FROM intake_audit;
+        DELETE FROM intakes;
+        DELETE FROM medications;
+      `);
+
+      for (const row of backup.tables.medications) insertObjectRow('medications', row);
+      for (const row of backup.tables.intakes) insertObjectRow('intakes', row);
+      for (const row of backup.tables.intakeAudit) insertObjectRow('intake_audit', row);
+      for (const row of backup.tables.stockMovements) insertObjectRow('stock_movements', row);
+      for (const row of backup.tables.handledNotificationActions) insertObjectRow('handled_notification_actions', row);
+    });
+  } finally {
+    db.execSync('PRAGMA foreign_keys = ON;');
+  }
+}
