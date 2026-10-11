@@ -203,10 +203,22 @@ export default function TodayScreen() {
 
         {(state === 'upcoming' || state === 'pending' || state === 'overdue') ? (
           <View style={styles.actions}>
-            <Pressable style={[styles.action, styles.takenButton]} onPress={() => save(item, 'taken')}>
+            <Pressable
+              style={[styles.action, styles.takenButton]}
+              onPress={() => save(item, 'taken')}
+              accessibilityRole="button"
+              accessibilityLabel={`Marcar ${item.medication.name} de las ${item.scheduledTime} como tomada`}
+              accessibilityHint="Guarda esta toma como realizada"
+            >
               <Text style={styles.takenButtonText}>✓ Tomado</Text>
             </Pressable>
-            <Pressable style={styles.action} onPress={() => save(item, 'skipped')}>
+            <Pressable
+              style={styles.action}
+              onPress={() => save(item, 'skipped')}
+              accessibilityRole="button"
+              accessibilityLabel={`Marcar ${item.medication.name} de las ${item.scheduledTime} como omitida`}
+              accessibilityHint="Guarda esta toma como omitida"
+            >
               <Text style={styles.skipButtonText}>Omitir</Text>
             </Pressable>
           </View>
@@ -225,7 +237,7 @@ export default function TodayScreen() {
             <Text style={styles.brand}>WeekFlow</Text>
             <Text style={styles.brandSub}>PILLS</Text>
           </View>
-          <View style={styles.version}><Text style={styles.versionText}>v0.4 · fase 4.2</Text></View>
+          <View style={styles.version} accessible accessibilityLabel="Versión 0.3.4"><Text style={styles.versionText}>v0.3.4</Text></View>
         </View>
 
         <View style={styles.hero}>
@@ -250,10 +262,22 @@ export default function TodayScreen() {
                 <Text style={styles.nowInstructions}>{focusDose.medication.instructions}</Text>
               ) : null}
               <View style={styles.actions}>
-                <Pressable style={[styles.action, styles.takenButton]} onPress={() => save(focusDose, 'taken')}>
+                <Pressable
+                  style={[styles.action, styles.takenButton]}
+                  onPress={() => save(focusDose, 'taken')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Marcar ${focusDose.medication.name} como tomada`}
+                  accessibilityHint="Guarda la toma destacada como realizada"
+                >
                   <Text style={styles.takenButtonText}>✓ TOMADO</Text>
                 </Pressable>
-                <Pressable style={styles.action} onPress={() => save(focusDose, 'skipped')}>
+                <Pressable
+                  style={styles.action}
+                  onPress={() => save(focusDose, 'skipped')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Marcar ${focusDose.medication.name} como omitida`}
+                  accessibilityHint="Guarda la toma destacada como omitida"
+                >
                   <Text style={styles.skipButtonText}>OMITIR</Text>
                 </Pressable>
               </View>
@@ -277,6 +301,15 @@ export default function TodayScreen() {
             </Text>
             <Text style={styles.previousAlertCopy}>Se mantienen con su fecha y hora originales hasta que las marques como tomadas u omitidas.</Text>
           </View>
+        ) : null}
+
+        {groups.pendingToday.length > (focusState === 'pending' ? 1 : 0) ? (
+          <>
+            <Text style={styles.section}>PENDIENTES AHORA</Text>
+            {groups.pendingToday
+              .filter((item) => item !== focusDose)
+              .map((item) => renderDoseCard(item))}
+          </>
         ) : null}
 
         {groups.overdueToday.length ? (
@@ -351,18 +384,18 @@ const styles = StyleSheet.create({
   doseCardResolved: { opacity: 0.76 },
   doseHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   time: { color: '#76AFFF', fontSize: 19, fontWeight: '900' },
-  dateTag: { color: colors.muted, fontSize: 11, fontWeight: '800', marginTop: 2 },
+  dateTag: { color: colors.muted, fontSize: 12, fontWeight: '800', marginTop: 2 },
   statusPill: { flexShrink: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.surface2 },
   statusOverdue: { backgroundColor: '#4A202A' },
   statusTaken: { backgroundColor: '#103B35' },
   statusSkipped: { backgroundColor: '#3B2027' },
-  statusText: { color: colors.muted, fontSize: 11, fontWeight: '900', textAlign: 'right' },
+  statusText: { color: colors.muted, fontSize: 12, fontWeight: '900', textAlign: 'right' },
   statusOverdueText: { color: '#FF9AA4' },
   statusTakenText: { color: '#7DE1C1' },
   statusSkippedText: { color: '#FF9AA4' },
   medName: { color: colors.text, fontSize: 19, fontWeight: '900', marginTop: 13 },
   medDose: { color: '#B8C9E0', fontSize: 14, fontWeight: '800', marginTop: 3 },
-  lastDoseLine: { color: '#8DB7EF', fontSize: 11, fontWeight: '800', marginTop: 8 },
+  lastDoseLine: { color: '#8DB7EF', fontSize: 12, fontWeight: '800', marginTop: 8 },
   instructions: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 8 },
   lowStock: { color: colors.warning, fontSize: 12, fontWeight: '900', marginTop: 10 },
   actions: { flexDirection: 'row', gap: 9, marginTop: 16 },
@@ -375,5 +408,5 @@ const styles = StyleSheet.create({
   emptyCopy: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
   safety: { marginTop: 24, borderRadius: 18, backgroundColor: '#111C30', padding: 15 },
   safetyTitle: { color: '#C5D5E9', fontSize: 12, fontWeight: '900' },
-  safetyCopy: { color: colors.muted, fontSize: 11, lineHeight: 17, marginTop: 4 },
+  safetyCopy: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 4 },
 });
