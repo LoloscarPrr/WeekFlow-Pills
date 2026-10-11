@@ -2,7 +2,7 @@
   "expo": {
     "name": "WeekFlow Pills",
     "slug": "weekflow-pills",
-    "version": "0.3.4",
+    "version": "0.4.0",
     "orientation": "portrait",
     "scheme": "weekflowpills",
     "userInterfaceStyle": "dark",
@@ -10,7 +10,7 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.weekflow.pills",
-      "versionCode": 7,
+      "versionCode": 8,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
