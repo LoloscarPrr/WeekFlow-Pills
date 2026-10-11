@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const data = fs.readFileSync('src/data/medications.ts', 'utf8');
 const notifications = fs.readFileSync('src/services/notifications.ts', 'utf8');
 const appConfig = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+const backup = fs.readFileSync('src/services/backup.ts', 'utf8');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
 // F — La misma toma no puede duplicarse ni descontar stock dos veces.
 assert.match(data, /UNIQUE\(medication_id, scheduled_date, scheduled_time\)/);
@@ -44,10 +46,23 @@ assert.match(data, /addMedicationStock/);
 assert.match(data, /setMedicationLowStockThreshold/);
 assert.match(data, /Math\.max\(0, currentStock - 1\)/);
 assert.match(data, /writeStockMovement/);
+assert.match(data, /exportLocalBackup/);
+assert.match(data, /validateLocalBackup/);
+assert.match(data, /restoreLocalBackup/);
+assert.match(data, /format: 'weekflow-pills-backup'/);
+assert.match(data, /version: 1/);
+assert.match(data, /DELETE FROM stock_movements/);
+assert.match(data, /DELETE FROM intakes/);
+assert.match(backup, /createPreventiveBackup/);
+assert.match(backup, /pickAndRestoreBackup/);
+assert.match(backup, /Sharing\.shareAsync/);
+assert.equal(pkg.dependencies['expo-file-system'], '~57.0.7');
+assert.equal(pkg.dependencies['expo-document-picker'], '~57.0.3');
+assert.equal(pkg.dependencies['expo-sharing'], '~57.0.19');
 assert.equal(appConfig.expo.version, '0.3.4');
 assert.equal(appConfig.expo.android.versionCode, 7);
 assert.equal(appConfig.expo.android.package, 'com.weekflow.pills');
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.SCHEDULE_EXACT_ALARM'));
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.RECEIVE_BOOT_COMPLETED'));
 
-console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3–4.7: OK');
+console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3–4.8: OK');
