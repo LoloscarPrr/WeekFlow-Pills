@@ -6,6 +6,10 @@ const notifications = fs.readFileSync('src/services/notifications.ts', 'utf8');
 const appConfig = JSON.parse(fs.readFileSync('app.json', 'utf8'));
 const backup = fs.readFileSync('src/services/backup.ts', 'utf8');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const today = fs.readFileSync('app/index.tsx', 'utf8');
+const history = fs.readFileSync('app/history.tsx', 'utf8');
+const medications = fs.readFileSync('app/medications.tsx', 'utf8');
+const bottomNav = fs.readFileSync('src/components/BottomNav.tsx', 'utf8');
 
 // F — La misma toma no puede duplicarse ni descontar stock dos veces.
 assert.match(data, /UNIQUE\(medication_id, scheduled_date, scheduled_time\)/);
@@ -59,10 +63,20 @@ assert.match(backup, /Sharing\.shareAsync/);
 assert.equal(pkg.dependencies['expo-file-system'], '~57.0.7');
 assert.equal(pkg.dependencies['expo-document-picker'], '~57.0.3');
 assert.equal(pkg.dependencies['expo-sharing'], '~57.0.19');
+assert.match(bottomNav, /accessibilityRole="tab"/);
+assert.match(bottomNav, /minHeight: 64/);
+assert.match(today, /accessibilityLabel=/);
+assert.match(today, /PENDIENTES AHORA/);
+assert.match(today, />v0\.3\.4</);
+assert.match(history, /accessibilityState=\{\{ selected: active \}\}/);
+assert.match(history, /minHeight: 48/);
+assert.match(medications, /accessibilityState=\{\{ selected: active \}\}/);
+assert.match(medications, /accessibilityLabel="Crear y guardar respaldo"/);
+assert.match(medications, /day:\{flex:1,minHeight:48/);
 assert.equal(appConfig.expo.version, '0.3.4');
 assert.equal(appConfig.expo.android.versionCode, 7);
 assert.equal(appConfig.expo.android.package, 'com.weekflow.pills');
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.SCHEDULE_EXACT_ALARM'));
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.RECEIVE_BOOT_COMPLETED'));
 
-console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3–4.8: OK');
+console.log('WeekFlow Pills v0.3.4 integration checks F–H + Phases 4.3–4.9: OK');
