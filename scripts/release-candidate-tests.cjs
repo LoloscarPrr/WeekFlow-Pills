@@ -8,10 +8,10 @@ const workflow = fs.readFileSync('.github/workflows/build-weekflow-pills.yml', '
 const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
-assert.equal(app.expo.version, '0.4.0');
-assert.equal(app.expo.android.versionCode, 8);
+assert.equal(app.expo.version, '0.4.1');
+assert.equal(app.expo.android.versionCode, 9);
 assert.equal(app.expo.android.package, 'com.weekflow.pills');
-assert.equal(pkg.version, '0.4.0');
+assert.equal(pkg.version, '0.4.1');
 
 // Regression guard: schema upgrades must remain additive.
 assert.doesNotMatch(data, /DROP\s+TABLE/i);
@@ -39,6 +39,8 @@ assert.match(data, /correctHistoryEntry/);
 assert.match(data, /stock_movements/);
 assert.match(data, /exportLocalBackup/);
 assert.match(data, /restoreLocalBackup/);
+assert.match(data, /deleteMedicationPermanently/);
+assert.match(data, /resetAllLocalData/);
 assert.match(backup, /createPreventiveBackup/);
 
 // Release pipeline must preserve the signing safety check.
@@ -46,4 +48,4 @@ assert.match(workflow, /Detect permanent signing secrets/);
 assert.match(workflow, /Permanent WeekFlow Pills signing secrets are not configured yet/);
 assert.match(workflow, /WeekFlow-Pills-v\$\{VERSION\}-Standalone\.apk/);
 
-console.log('WeekFlow Pills 0.4.0 release-candidate regression checks: OK');
+console.log('WeekFlow Pills 0.4.1 release-candidate regression checks: OK');
