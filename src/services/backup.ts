@@ -1,7 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
-import { exportLocalBackup, restoreLocalBackup, validateLocalBackup } from '@/src/data/medications';
+import { exportLocalBackup, resetAllLocalData, restoreLocalBackup, validateLocalBackup } from '@/src/data/medications';
 
 function stamp(date = new Date()) {
   return date.toISOString().replace(/[:.]/g, '-');
@@ -61,4 +61,11 @@ export async function pickAndRestoreBackup() {
     preventiveBackupUri,
     sourceName: asset.name,
   };
+}
+
+
+export function resetAppToZero() {
+  const preventiveBackupUri = createPreventiveBackup();
+  resetAllLocalData();
+  return preventiveBackupUri;
 }
