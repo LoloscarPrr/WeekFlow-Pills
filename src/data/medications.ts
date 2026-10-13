@@ -755,3 +755,28 @@ export function restoreLocalBackup(input: unknown) {
     db.execSync('PRAGMA foreign_keys = ON;');
   }
 }
+
+
+export function deleteMedicationPermanently(id: number) {
+  ensureDatabase();
+  db.withTransactionSync(() => {
+    db.runSync('DELETE FROM stock_movements WHERE medication_id = ?', id);
+    db.runSync('DELETE FROM intake_audit WHERE medication_id = ?', id);
+    db.runSync('DELETE FROM intakes WHERE medication_id = ?', id);
+    db.runSync('DELETE FROM medications WHERE id = ?', id);
+  });
+}
+
+export function resetAllLocalData() {
+  ensureDatabase();
+  db.withTransactionSync(() => {
+    db.execSync(`
+      DELETE FROM handled_notification_actions;
+      DELETE FROM stock_movements;
+      DELETE FROM intake_audit;
+      DELETE FROM intakes;
+      DELETE FROM medications;
+      DELETE FROM sqlite_sequence WHERE name IN ('medications', 'intakes', 'intake_audit', 'stock_movements');
+    `);
+  });
+}
