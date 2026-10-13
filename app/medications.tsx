@@ -17,6 +17,7 @@ import {
 import {
   addMedication,
   addMedicationStock,
+  deleteMedicationPermanently,
   listArchivedMedications,
   listLastTakenByMedication,
   listMedications,
@@ -29,7 +30,7 @@ import {
   type LastTaken,
   type StockMovement,
 } from '@/src/data/medications';
-import { exportBackupFile, pickAndRestoreBackup } from '@/src/services/backup';
+import { exportBackupFile, pickAndRestoreBackup, resetAppToZero } from '@/src/services/backup';
 import { syncMedicationNotifications } from '@/src/services/notifications';
 import { colors } from '@/src/theme/colors';
 
@@ -269,6 +270,74 @@ export default function MedicationsScreen() {
     refresh();
     await syncMedicationNotifications().catch(() => undefined);
     setMessage(`${medication.name} fue restaurado y quedó activo nuevamente.`);
+  };
+
+  const deleteMedication = (medication: Medication) => {
+    Alert.alert(
+      'Eliminar definitivamente',
+      `Esto eliminará ${medication.name}, su historial de tomas y sus movimientos de stock. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              deleteMedicationPermanently(medication.id);
+              if (editingId === medication.id) resetForm();
+              refresh();
+              await syncMedicationNotifications().catch(() => undefined);
+              setMessage(`${medication.name} fue eliminado definitivamente.`);
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const resetApplication = () => {
+    Alert.alert(
+      'Restablecer WeekFlow Pills',
+      'La app quedará como nueva: se eliminarán medicamentos, historial, stock, archivados y registros locales. Antes de borrar, se guardará una copia preventiva interna.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Continuar',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              '¿Seguro que quieres empezar desde cero?',
+              'Esta es la última confirmación. Después del restablecimiento no habrá medicamentos configurados.',
+              [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'Sí, borrar todo',
+                  style: 'destructive',
+                  onPress: () => {
+                    void (async () => {
+                      try {
+                        setBackupBusy(true);
+                        resetAppToZero();
+                        resetForm();
+                        setExpandedStockId(null);
+                        setStockMovements({});
+                        refresh();
+                        await syncMedicationNotifications().catch(() => undefined);
+                        setMessage('WeekFlow Pills quedó restablecido desde cero. Se creó una copia preventiva interna.');
+                      } catch (error) {
+                        setMessage(error instanceof Error ? error.message : 'No se pudo restablecer la app.');
+                      } finally {
+                        setBackupBusy(false);
+                      }
+                    })();
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   const refreshMovements = (medicationId: number) => {
@@ -517,6 +586,15 @@ export default function MedicationsScreen() {
                 >
                   <Text style={s.archiveActionText}>Archivar medicamento</Text>
                 </Pressable>
+                <Pressable
+                  style={s.deleteAction}
+                  onPress={() => deleteMedication(medication)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Eliminar definitivamente ${medication.name}`}
+                  accessibilityHint="Elimina también su historial y movimientos de stock"
+                >
+                  <Text style={s.deleteActionText}>Eliminar definitivamente</Text>
+                </Pressable>
               </View>
             );
           }) : <Text style={s.help}>Aún no hay medicamentos configurados.</Text>}
@@ -547,6 +625,19 @@ export default function MedicationsScreen() {
               <Text style={s.backupSecondaryText}>Restaurar desde archivo</Text>
             </Pressable>
             <Text style={s.backupWarning}>Restaurar reemplaza los datos locales actuales. La app crea una copia preventiva interna antes de aplicar el archivo.</Text>
+            <View style={s.resetDivider} />
+            <Text style={s.resetTitle}>Empezar desde cero</Text>
+            <Text style={s.resetCopy}>Úsalo para borrar datos de prueba y dejar WeekFlow Pills como recién instalada. Se crea una copia preventiva interna antes de borrar.</Text>
+            <Pressable
+              style={[s.resetAction, backupBusy && s.backupDisabled]}
+              disabled={backupBusy}
+              onPress={resetApplication}
+              accessibilityRole="button"
+              accessibilityLabel="Restablecer WeekFlow Pills desde cero"
+              accessibilityState={{ disabled: backupBusy }}
+            >
+              <Text style={s.resetActionText}>Restablecer app</Text>
+            </Pressable>
           </View>
 
           {archivedMedications.length ? (
@@ -570,6 +661,14 @@ export default function MedicationsScreen() {
                     accessibilityLabel={`Restaurar y reactivar ${medication.name}`}
                   >
                     <Text style={s.restoreActionText}>Restaurar y reactivar</Text>
+                  </Pressable>
+                  <Pressable
+                    style={s.deleteAction}
+                    onPress={() => deleteMedication(medication)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Eliminar definitivamente ${medication.name}`}
+                  >
+                    <Text style={s.deleteActionText}>Eliminar definitivamente</Text>
                   </Pressable>
                 </View>
               ))}
@@ -597,6 +696,6 @@ const s = StyleSheet.create({
   days:{flexDirection:'row',gap:6},day:{flex:1,minHeight:48,borderRadius:12,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center'},dayOn:{backgroundColor:'#12315A',borderColor:colors.blue},dayText:{color:colors.muted,fontWeight:'900'},dayTextOn:{color:colors.text},message:{color:'#B6CBE7',fontSize:12,lineHeight:18,marginBottom:12},save:{minHeight:52,backgroundColor:colors.blue,borderRadius:16,alignItems:'center',justifyContent:'center'},saveText:{color:'#fff',fontSize:15,fontWeight:'900'},section:{color:'#76AFFF',fontSize:13,fontWeight:'900',letterSpacing:3,marginTop:30,marginBottom:11},
   med:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.line,borderRadius:22,padding:17,marginBottom:11},paused:{opacity:.68},medTop:{flexDirection:'row',alignItems:'flex-start',gap:10},medName:{color:colors.text,fontSize:18,fontWeight:'900'},medDose:{color:'#B7C8DF',fontSize:13,fontWeight:'800',marginTop:4},active:{color:'#7DE1C1',fontSize:10,fontWeight:'900',backgroundColor:'#103B35',paddingHorizontal:9,paddingVertical:6,borderRadius:999},inactive:{color:'#E7C77C',fontSize:10,fontWeight:'900',backgroundColor:'#332D22',paddingHorizontal:9,paddingVertical:6,borderRadius:999},medMode:{color:'#D8C3F4',fontSize:11,fontWeight:'900',marginTop:12},medMeta:{color:'#76AFFF',fontSize:12,fontWeight:'800',marginTop:5},duration:{color:'#C5D5E9',fontSize:11,fontWeight:'800',marginTop:6},last:{color:'#7DE1C1',fontSize:11,fontWeight:'800',marginTop:7},
   stockBlock:{marginTop:14,paddingTop:13,borderTopWidth:1,borderTopColor:colors.line},stock:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},stockText:{color:colors.text,fontSize:14,fontWeight:'900'},stockLow:{color:colors.warning,fontSize:14,fontWeight:'900'},stockHint:{color:colors.muted,fontSize:11,fontWeight:'800',marginTop:3},stockDisabled:{color:colors.muted,fontSize:11,fontWeight:'800',marginTop:12},thresholdRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:8},movements:{marginTop:10,backgroundColor:'#0B182C',borderRadius:14,padding:10},movementRow:{flexDirection:'row',alignItems:'center',gap:10,paddingVertical:8,borderBottomWidth:1,borderBottomColor:colors.line},movementReason:{color:colors.text,fontSize:11,fontWeight:'900'},movementNote:{color:colors.muted,fontSize:11,marginTop:2},movementPlus:{color:'#7DE1C1',fontSize:11,fontWeight:'900'},movementMinus:{color:'#FF9AA4',fontSize:11,fontWeight:'900'},small:{width:48,height:48,borderRadius:13,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center'},smallText:{color:colors.text,fontSize:22,fontWeight:'800'},action:{flex:1,minHeight:48,borderRadius:13,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center',marginTop:13},actionText:{color:'#A9CFFF',fontSize:12,fontWeight:'900'},
-  archiveAction:{minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#5B3440',alignItems:'center',justifyContent:'center',marginTop:9},archiveActionText:{color:'#FF9AA4',fontSize:12,fontWeight:'900'},archiveHelp:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:-4,marginBottom:10},archivedCard:{opacity:.78,borderColor:'#3D3652'},archivedBadge:{color:'#C7B5DD',fontSize:10,fontWeight:'900',backgroundColor:'#2A2236',paddingHorizontal:9,paddingVertical:6,borderRadius:999},restoreAction:{minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#315F8E',alignItems:'center',justifyContent:'center',marginTop:13},restoreActionText:{color:'#8FC0FF',fontSize:12,fontWeight:'900'},
-  backupCard:{backgroundColor:colors.surface,borderWidth:1,borderColor:'#315F8E',borderRadius:20,padding:16,marginBottom:10},backupTitle:{color:colors.text,fontSize:16,fontWeight:'900'},backupCopy:{color:colors.muted,fontSize:12,lineHeight:18,marginTop:5},backupPrimary:{minHeight:48,borderRadius:14,backgroundColor:colors.blue,alignItems:'center',justifyContent:'center',marginTop:14},backupPrimaryText:{color:'#fff',fontSize:13,fontWeight:'900'},backupSecondary:{minHeight:46,borderRadius:14,borderWidth:1,borderColor:'#315F8E',alignItems:'center',justifyContent:'center',marginTop:8},backupSecondaryText:{color:'#8FC0FF',fontSize:13,fontWeight:'900'},backupWarning:{color:'#C6AFCF',fontSize:11,lineHeight:17,marginTop:10},backupDisabled:{opacity:.55}
+  archiveAction:{minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#5B3440',alignItems:'center',justifyContent:'center',marginTop:9},archiveActionText:{color:'#FF9AA4',fontSize:12,fontWeight:'900'},deleteAction:{minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#7A2734',backgroundColor:'#2A1017',alignItems:'center',justifyContent:'center',marginTop:9},deleteActionText:{color:'#FF8C98',fontSize:12,fontWeight:'900'},archiveHelp:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:-4,marginBottom:10},archivedCard:{opacity:.78,borderColor:'#3D3652'},archivedBadge:{color:'#C7B5DD',fontSize:10,fontWeight:'900',backgroundColor:'#2A2236',paddingHorizontal:9,paddingVertical:6,borderRadius:999},restoreAction:{minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#315F8E',alignItems:'center',justifyContent:'center',marginTop:13},restoreActionText:{color:'#8FC0FF',fontSize:12,fontWeight:'900'},
+  backupCard:{backgroundColor:colors.surface,borderWidth:1,borderColor:'#315F8E',borderRadius:20,padding:16,marginBottom:10},backupTitle:{color:colors.text,fontSize:16,fontWeight:'900'},backupCopy:{color:colors.muted,fontSize:12,lineHeight:18,marginTop:5},backupPrimary:{minHeight:48,borderRadius:14,backgroundColor:colors.blue,alignItems:'center',justifyContent:'center',marginTop:14},backupPrimaryText:{color:'#fff',fontSize:13,fontWeight:'900'},backupSecondary:{minHeight:46,borderRadius:14,borderWidth:1,borderColor:'#315F8E',alignItems:'center',justifyContent:'center',marginTop:8},backupSecondaryText:{color:'#8FC0FF',fontSize:13,fontWeight:'900'},backupWarning:{color:'#C6AFCF',fontSize:11,lineHeight:17,marginTop:10},backupDisabled:{opacity:.55},resetDivider:{height:1,backgroundColor:colors.line,marginTop:16,marginBottom:14},resetTitle:{color:'#FFB1B9',fontSize:14,fontWeight:'900'},resetCopy:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:5},resetAction:{minHeight:48,borderRadius:14,borderWidth:1,borderColor:'#7A2734',backgroundColor:'#2A1017',alignItems:'center',justifyContent:'center',marginTop:10},resetActionText:{color:'#FF8C98',fontSize:13,fontWeight:'900'}
 });
