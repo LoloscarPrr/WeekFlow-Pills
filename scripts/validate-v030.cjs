@@ -67,7 +67,7 @@ assert.match(bottomNav, /accessibilityRole="tab"/);
 assert.match(bottomNav, /minHeight: 64/);
 assert.match(today, /accessibilityLabel=/);
 assert.match(today, /PENDIENTES AHORA/);
-assert.match(today, />v0\.4\.0</);
+assert.match(today, />v0\.4\.1</);
 assert.match(history, /accessibilityState=\{\{ selected: active \}\}/);
 assert.match(history, /minHeight: 48/);
 assert.match(medications, /accessibilityState=\{\{ selected: active \}\}/);
