@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Medication, ScheduleMode } from '@/src/domain/medication';
 import {
@@ -31,7 +31,12 @@ import {
   type StockMovement,
 } from '@/src/data/medications';
 import { exportBackupFile, pickAndRestoreBackup, resetAppToZero } from '@/src/services/backup';
-import { syncMedicationNotifications } from '@/src/services/notifications';
+import {
+  getMedicationReminderDiagnostics,
+  scheduleNotificationDiagnosticTest,
+  syncMedicationNotifications,
+  type MedicationReminderDiagnostics,
+} from '@/src/services/notifications';
 import { colors } from '@/src/theme/colors';
 
 const allDays = [0, 1, 2, 3, 4, 5, 6];
@@ -69,6 +74,8 @@ export default function MedicationsScreen() {
   const [stockMovements, setStockMovements] = useState<Record<number, StockMovement[]>>({});
   const [message, setMessage] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
+  const [notificationDiagnostics, setNotificationDiagnostics] = useState<MedicationReminderDiagnostics | null>(null);
+  const [notificationDiagnosticBusy, setNotificationDiagnosticBusy] = useState(false);
 
   const refresh = () => {
     setMedications(listMedications());
@@ -77,6 +84,21 @@ export default function MedicationsScreen() {
   };
 
   useEffect(refresh, []);
+
+  const refreshNotificationDiagnostics = async () => {
+    try {
+      setNotificationDiagnosticBusy(true);
+      setNotificationDiagnostics(await getMedicationReminderDiagnostics());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo revisar el estado de las notificaciones.');
+    } finally {
+      setNotificationDiagnosticBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshNotificationDiagnostics();
+  }, []);
 
   const resetForm = () => {
     setEditingId(null);
@@ -382,6 +404,21 @@ export default function MedicationsScreen() {
     }
   };
 
+  const testNotification = async () => {
+    try {
+      setNotificationDiagnosticBusy(true);
+      await scheduleNotificationDiagnosticTest(5);
+      setMessage('Prueba programada. Debería aparecer una notificación en unos 5 segundos.');
+      setTimeout(() => {
+        void refreshNotificationDiagnostics();
+      }, 1000);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo programar la notificación de prueba.');
+    } finally {
+      setNotificationDiagnosticBusy(false);
+    }
+  };
+
   const restoreBackup = () => {
     Alert.alert(
       'Restaurar respaldo',
@@ -599,6 +636,56 @@ export default function MedicationsScreen() {
             );
           }) : <Text style={s.help}>Aún no hay medicamentos configurados.</Text>}
 
+          <Text style={s.section}>DIAGNÓSTICO DE NOTIFICACIONES</Text>
+          <View style={s.diagnosticCard}>
+            <Text style={s.diagnosticTitle}>Estado de recordatorios</Text>
+            <Text style={s.diagnosticCopy}>Úsalo si un teléfono no está mostrando alertas. Esta prueba no modifica tus medicamentos.</Text>
+            <View style={s.diagnosticRow}>
+              <Text style={s.diagnosticLabel}>Permiso</Text>
+              <Text style={notificationDiagnostics?.permissionGranted ? s.diagnosticOk : s.diagnosticBad}>
+                {notificationDiagnostics ? (notificationDiagnostics.permissionGranted ? 'Permitido' : 'Bloqueado') : 'Revisando…'}
+              </Text>
+            </View>
+            <View style={s.diagnosticRow}>
+              <Text style={s.diagnosticLabel}>Recordatorios programados</Text>
+              <Text style={s.diagnosticValue}>{notificationDiagnostics?.totalManaged ?? '—'}</Text>
+            </View>
+            {notificationDiagnostics ? (
+              <Text style={s.diagnosticDetail}>
+                Recurrentes: {notificationDiagnostics.recurring} · Con fecha: {notificationDiagnostics.dated} · Pospuestos: {notificationDiagnostics.snoozed}
+              </Text>
+            ) : null}
+            <Pressable
+              style={[s.diagnosticPrimary, notificationDiagnosticBusy && s.backupDisabled]}
+              disabled={notificationDiagnosticBusy}
+              onPress={() => void testNotification()}
+              accessibilityRole="button"
+              accessibilityLabel="Probar notificación en cinco segundos"
+              accessibilityState={{ disabled: notificationDiagnosticBusy }}
+            >
+              <Text style={s.diagnosticPrimaryText}>{notificationDiagnosticBusy ? 'Revisando…' : 'Probar notificación en 5 segundos'}</Text>
+            </Pressable>
+            <View style={s.row}>
+              <Pressable
+                style={s.diagnosticSecondary}
+                onPress={() => void refreshNotificationDiagnostics()}
+                accessibilityRole="button"
+                accessibilityLabel="Actualizar diagnóstico de notificaciones"
+              >
+                <Text style={s.diagnosticSecondaryText}>Actualizar</Text>
+              </Pressable>
+              <Pressable
+                style={s.diagnosticSecondary}
+                onPress={() => void Linking.openSettings()}
+                accessibilityRole="button"
+                accessibilityLabel="Abrir ajustes de WeekFlow Pills"
+              >
+                <Text style={s.diagnosticSecondaryText}>Abrir ajustes</Text>
+              </Pressable>
+            </View>
+            <Text style={s.diagnosticHint}>Si la prueba no aparece, revisa permisos de notificaciones y batería sin restricciones en los ajustes del teléfono.</Text>
+          </View>
+
           <Text style={s.section}>RESPALDO LOCAL</Text>
           <View style={s.backupCard}>
             <Text style={s.backupTitle}>Tus datos siguen siendo tuyos</Text>
@@ -697,5 +784,6 @@ const s = StyleSheet.create({
   med:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.line,borderRadius:22,padding:17,marginBottom:11},paused:{opacity:.68},medTop:{flexDirection:'row',alignItems:'flex-start',gap:10},medName:{color:colors.text,fontSize:18,fontWeight:'900'},medDose:{color:'#B7C8DF',fontSize:13,fontWeight:'800',marginTop:4},active:{color:'#7DE1C1',fontSize:10,fontWeight:'900',backgroundColor:'#103B35',paddingHorizontal:9,paddingVertical:6,borderRadius:999},inactive:{color:'#E7C77C',fontSize:10,fontWeight:'900',backgroundColor:'#332D22',paddingHorizontal:9,paddingVertical:6,borderRadius:999},medMode:{color:'#D8C3F4',fontSize:11,fontWeight:'900',marginTop:12},medMeta:{color:'#76AFFF',fontSize:12,fontWeight:'800',marginTop:5},duration:{color:'#C5D5E9',fontSize:11,fontWeight:'800',marginTop:6},last:{color:'#7DE1C1',fontSize:11,fontWeight:'800',marginTop:7},
   stockBlock:{marginTop:14,paddingTop:13,borderTopWidth:1,borderTopColor:colors.line},stock:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},stockText:{color:colors.text,fontSize:14,fontWeight:'900'},stockLow:{color:colors.warning,fontSize:14,fontWeight:'900'},stockHint:{color:colors.muted,fontSize:11,fontWeight:'800',marginTop:3},stockDisabled:{color:colors.muted,fontSize:11,fontWeight:'800',marginTop:12},thresholdRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:8},movements:{marginTop:10,backgroundColor:'#0B182C',borderRadius:14,padding:10},movementRow:{flexDirection:'row',alignItems:'center',gap:10,paddingVertical:8,borderBottomWidth:1,borderBottomColor:colors.line},movementReason:{color:colors.text,fontSize:11,fontWeight:'900'},movementNote:{color:colors.muted,fontSize:11,marginTop:2},movementPlus:{color:'#7DE1C1',fontSize:11,fontWeight:'900'},movementMinus:{color:'#FF9AA4',fontSize:11,fontWeight:'900'},small:{width:48,height:48,borderRadius:13,backgroundColor:colors.surface2,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center'},smallText:{color:colors.text,fontSize:22,fontWeight:'800'},action:{flex:1,minHeight:48,borderRadius:13,borderWidth:1,borderColor:colors.line,alignItems:'center',justifyContent:'center',marginTop:13},actionText:{color:'#A9CFFF',fontSize:12,fontWeight:'900'},
   archiveAction:{minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#5B3440',alignItems:'center',justifyContent:'center',marginTop:9},archiveActionText:{color:'#FF9AA4',fontSize:12,fontWeight:'900'},deleteAction:{minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#7A2734',backgroundColor:'#2A1017',alignItems:'center',justifyContent:'center',marginTop:9},deleteActionText:{color:'#FF8C98',fontSize:12,fontWeight:'900'},archiveHelp:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:-4,marginBottom:10},archivedCard:{opacity:.78,borderColor:'#3D3652'},archivedBadge:{color:'#C7B5DD',fontSize:10,fontWeight:'900',backgroundColor:'#2A2236',paddingHorizontal:9,paddingVertical:6,borderRadius:999},restoreAction:{minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#315F8E',alignItems:'center',justifyContent:'center',marginTop:13},restoreActionText:{color:'#8FC0FF',fontSize:12,fontWeight:'900'},
+  diagnosticCard:{backgroundColor:colors.surface,borderWidth:1,borderColor:'#355F58',borderRadius:20,padding:16,marginBottom:10},diagnosticTitle:{color:colors.text,fontSize:16,fontWeight:'900'},diagnosticCopy:{color:colors.muted,fontSize:12,lineHeight:18,marginTop:5},diagnosticRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:12},diagnosticLabel:{color:'#C9D6E8',fontSize:12,fontWeight:'800'},diagnosticValue:{color:colors.text,fontSize:13,fontWeight:'900'},diagnosticOk:{color:'#7DE1C1',fontSize:13,fontWeight:'900'},diagnosticBad:{color:'#FF9AA4',fontSize:13,fontWeight:'900'},diagnosticDetail:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:7},diagnosticPrimary:{minHeight:48,borderRadius:14,backgroundColor:'#1B6B5A',alignItems:'center',justifyContent:'center',marginTop:14},diagnosticPrimaryText:{color:'#fff',fontSize:13,fontWeight:'900'},diagnosticSecondary:{flex:1,minHeight:48,borderRadius:14,borderWidth:1,borderColor:'#355F58',alignItems:'center',justifyContent:'center',marginTop:8},diagnosticSecondaryText:{color:'#94E6D3',fontSize:12,fontWeight:'900'},diagnosticHint:{color:'#C6AFCF',fontSize:11,lineHeight:17,marginTop:10},
   backupCard:{backgroundColor:colors.surface,borderWidth:1,borderColor:'#315F8E',borderRadius:20,padding:16,marginBottom:10},backupTitle:{color:colors.text,fontSize:16,fontWeight:'900'},backupCopy:{color:colors.muted,fontSize:12,lineHeight:18,marginTop:5},backupPrimary:{minHeight:48,borderRadius:14,backgroundColor:colors.blue,alignItems:'center',justifyContent:'center',marginTop:14},backupPrimaryText:{color:'#fff',fontSize:13,fontWeight:'900'},backupSecondary:{minHeight:46,borderRadius:14,borderWidth:1,borderColor:'#315F8E',alignItems:'center',justifyContent:'center',marginTop:8},backupSecondaryText:{color:'#8FC0FF',fontSize:13,fontWeight:'900'},backupWarning:{color:'#C6AFCF',fontSize:11,lineHeight:17,marginTop:10},backupDisabled:{opacity:.55},resetDivider:{height:1,backgroundColor:colors.line,marginTop:16,marginBottom:14},resetTitle:{color:'#FFB1B9',fontSize:14,fontWeight:'900'},resetCopy:{color:colors.muted,fontSize:11,lineHeight:17,marginTop:5},resetAction:{minHeight:48,borderRadius:14,borderWidth:1,borderColor:'#7A2734',backgroundColor:'#2A1017',alignItems:'center',justifyContent:'center',marginTop:10},resetActionText:{color:'#FF8C98',fontSize:13,fontWeight:'900'}
 });
