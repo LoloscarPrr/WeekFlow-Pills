@@ -268,13 +268,54 @@ export async function handleMedicationNotificationResponse(response: Notificatio
   await Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
 }
 
-export async function getMedicationReminderDiagnostics() {
+export type MedicationReminderDiagnostics = {
+  permissionGranted: boolean;
+  permissionStatus: Notifications.PermissionStatus;
+  totalManaged: number;
+  recurring: number;
+  dated: number;
+  snoozed: number;
+};
+
+export async function getMedicationReminderDiagnostics(): Promise<MedicationReminderDiagnostics> {
+  const permission = await Notifications.getPermissionsAsync();
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   const managed = scheduled.filter((request) => request.content.data?.managedBy === MANAGED_BY);
   return {
+    permissionGranted: permission.granted,
+    permissionStatus: permission.status,
     totalManaged: managed.length,
     recurring: managed.filter((request) => request.content.data?.kind === 'recurring').length,
     dated: managed.filter((request) => request.content.data?.kind === 'dated').length,
     snoozed: managed.filter((request) => request.content.data?.kind === 'snooze').length,
   };
+}
+
+export async function scheduleNotificationDiagnosticTest(delaySeconds = 5) {
+  if (!Number.isInteger(delaySeconds) || delaySeconds < 1 || delaySeconds > 60) {
+    throw new Error('El retraso de prueba debe estar entre 1 y 60 segundos.');
+  }
+
+  const allowed = await ensurePermission();
+  if (!allowed) {
+    throw new Error('Las notificaciones no tienen permiso en este teléfono.');
+  }
+
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Prueba de WeekFlow Pills',
+      body: 'Si ves y escuchas esto, las notificaciones locales están funcionando.',
+      sound: true,
+      data: {
+        managedBy: MANAGED_BY,
+        kind: 'diagnostic-test',
+      },
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: delaySeconds,
+      repeats: false,
+      channelId: CHANNEL_ID,
+    },
+  });
 }
