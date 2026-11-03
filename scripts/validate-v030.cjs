@@ -83,10 +83,10 @@ assert.match(medications, /DIAGNÓSTICO DE NOTIFICACIONES/);
 assert.match(medications, /Probar notificación en 5 segundos/);
 assert.match(medications, /Linking\.openSettings/);
 assert.match(medications, /day:\{flex:1,minHeight:48/);
-assert.equal(appConfig.expo.version, '0.4.2');
-assert.equal(appConfig.expo.android.versionCode, 10);
+assert.equal(appConfig.expo.version, '0.4.3');
+assert.equal(appConfig.expo.android.versionCode, 11);
 assert.equal(appConfig.expo.android.package, 'com.weekflow.pills');
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.SCHEDULE_EXACT_ALARM'));
 assert.ok(appConfig.expo.android.permissions.includes('android.permission.RECEIVE_BOOT_COMPLETED'));
 
-console.log('WeekFlow Pills v0.4.2 integration checks F–H + Phases 4.3–4.10: OK');
+console.log('WeekFlow Pills v0.4.3 integration checks F–H + Phases 4.3–4.10: OK');
