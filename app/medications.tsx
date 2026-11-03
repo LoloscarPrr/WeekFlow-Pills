@@ -683,7 +683,8 @@ export default function MedicationsScreen() {
                 <Text style={s.diagnosticSecondaryText}>Abrir ajustes</Text>
               </Pressable>
             </View>
-            <Text style={s.diagnosticHint}>Si la prueba no aparece, revisa permisos de notificaciones y batería sin restricciones en los ajustes del teléfono.</Text>
+            <Text style={s.diagnosticHint}>Si no llega la prueba: activa Notificaciones y la categoría «Recordatorios de medicamentos». En Android 14+, revisa también Ajustes → Apps → Acceso especial → Alarmas y recordatorios → WeekFlow Pills. En Xiaomi/Redmi/POCO, selecciona batería «Sin restricciones» y permite inicio automático. Después vuelve y pulsa «Actualizar».</Text>
+            <Text style={s.diagnosticHint}>Comprueba también una dosis de prueba con la pantalla bloqueada. Que diga «programado» no confirma que Android la haya entregado. No dependas exclusivamente de esta app hasta verificarla.</Text>
           </View>
 
           <Text style={s.section}>RESPALDO LOCAL</Text>

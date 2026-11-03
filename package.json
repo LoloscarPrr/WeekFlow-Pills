@@ -1,6 +1,6 @@
 {
   "name": "weekflow-pills",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -11,7 +11,8 @@
     "test:schedule": "rm -rf .tmp-tests && tsc src/domain/medication.ts --ignoreConfig --module commonjs --target es2020 --outDir .tmp-tests --skipLibCheck && node scripts/schedule-tests.cjs && rm -rf .tmp-tests",
     "test:v030": "node scripts/validate-v030.cjs",
     "test:rc": "node scripts/release-candidate-tests.cjs",
-    "quality": "npm run typecheck && npm run test:schedule && npm run test:v030 && npm run test:rc"
+    "quality": "npm run typecheck && npm run test:schedule && npm run test:v030 && npm run test:rc && npm run test:notifications",
+    "test:notifications": "node scripts/notification-reliability-tests.cjs"
   },
   "dependencies": {
     "expo": "~57.0.8",

@@ -47,6 +47,7 @@ async function ensurePermission() {
       name: 'Recordatorios de medicamentos',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 180, 250],
+      sound: 'default',
     });
   }
 
@@ -90,25 +91,56 @@ function medicationNotificationContent(
   } satisfies Notifications.NotificationContentInput;
 }
 
+type ScheduledRequest = Awaited<ReturnType<typeof Notifications.getAllScheduledNotificationsAsync>>[number];
+
+/**
+ * Preserve a matching native alarm rather than cancelling and rebuilding it
+ * whenever Android resumes the app. For changed content, schedule the new
+ * request first and remove the old one only after scheduling succeeds.
+ */
+async function keepOrReplaceReminder(
+  key: string,
+  content: Notifications.NotificationContentInput,
+  trigger: Notifications.NotificationTriggerInput,
+  existingByKey: Map<string, ScheduledRequest[]>,
+): Promise<void> {
+  const existing = existingByKey.get(key) ?? [];
+  const matching = existing.find((request) =>
+    request.content.title === content.title
+    && request.content.body === content.body
+    && request.content.data?.kind === content.data?.kind
+  );
+  if (matching) {
+    // Leave the functioning alarm in place; clear only duplicates.
+    await Promise.all(existing.filter((request) => request.identifier !== matching.identifier)
+      .map((request) => Notifications.cancelScheduledNotificationAsync(request.identifier)));
+    return;
+  }
+  await Notifications.scheduleNotificationAsync({ content, trigger });
+  // In case of a scheduling failure, existing alarms are not removed.
+  await Promise.all(existing.map((request) => Notifications.cancelScheduledNotificationAsync(request.identifier)));
+}
+
 async function performSync() {
   const allowed = await ensurePermission();
   if (!allowed) return false;
 
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-
-  // Rebuild only WeekFlow Pills recurring reminders. Snoozes are intentionally preserved.
+  const existingByKey = new Map<string, ScheduledRequest[]>();
+  const legacyRecurring: ScheduledRequest[] = [];
   for (const request of scheduled) {
     const data = request.content.data ?? {};
-    const managedBy = data.managedBy;
-    const kind = data.kind;
-
-    // Old WeekFlow Pills builds did not include managedBy. Their recurring notifications
-    // still carry kind=recurring, so remove them once to avoid duplicate alerts.
-    const isLegacyRecurring = managedBy === undefined && kind === 'recurring';
-    const isManagedRecurring = managedBy === MANAGED_BY && (kind === 'recurring' || kind === 'dated');
-
-    if (isLegacyRecurring || isManagedRecurring) {
-      await Notifications.cancelScheduledNotificationAsync(request.identifier);
+    // Preserve snoozes: their delivery is independent from the recurring plan.
+    if (data.managedBy === MANAGED_BY && (data.kind === 'recurring' || data.kind === 'dated')) {
+      const key = data.notificationKey;
+      if (typeof key === 'string') {
+        existingByKey.set(key, [...(existingByKey.get(key) ?? []), request]);
+      } else {
+        legacyRecurring.push(request);
+      }
+    } else if (data.managedBy === undefined && data.kind === 'recurring') {
+      // Legacy schedule has no stable ID; replace only once the new plan is created.
+      legacyRecurring.push(request);
     }
   }
 
@@ -142,14 +174,11 @@ async function performSync() {
           });
           if (!content) continue;
 
-          await Notifications.scheduleNotificationAsync({
-            content,
-            trigger: {
-              type: Notifications.SchedulableTriggerInputTypes.DATE,
-              date: when,
-              channelId: CHANNEL_ID,
-            },
-          });
+          await keepOrReplaceReminder(key, content, {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: when,
+            channelId: CHANNEL_ID,
+          }, existingByKey);
         }
       }
       continue;
@@ -164,15 +193,12 @@ async function performSync() {
         desiredKeys.add(key);
         const content = medicationNotificationContent(medication.id, time, { notificationKey: key });
         if (!content) continue;
-        await Notifications.scheduleNotificationAsync({
-          content,
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DAILY,
-            hour,
-            minute,
-            channelId: CHANNEL_ID,
-          },
-        });
+        await keepOrReplaceReminder(key, content, {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour,
+          minute,
+          channelId: CHANNEL_ID,
+        }, existingByKey);
       } else {
         for (const day of medication.days) {
           const key = notificationKey(medication.id, time, day);
@@ -180,20 +206,25 @@ async function performSync() {
           desiredKeys.add(key);
           const content = medicationNotificationContent(medication.id, time, { notificationKey: key });
           if (!content) continue;
-          await Notifications.scheduleNotificationAsync({
-            content,
-            trigger: {
-              type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-              weekday: day + 1,
-              hour,
-              minute,
-              channelId: CHANNEL_ID,
-            },
-          });
+          await keepOrReplaceReminder(key, content, {
+            type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+            weekday: day + 1,
+            hour,
+            minute,
+            channelId: CHANNEL_ID,
+          }, existingByKey);
         }
       }
     }
   }
+
+  // Reconcile removed/disabled/edited medications only after the new plan has
+  // been safely scheduled. If anything above throws, older valid alarms stay.
+  for (const [key, requests] of existingByKey) {
+    if (desiredKeys.has(key)) continue;
+    await Promise.all(requests.map((request) => Notifications.cancelScheduledNotificationAsync(request.identifier)));
+  }
+  await Promise.all(legacyRecurring.map((request) => Notifications.cancelScheduledNotificationAsync(request.identifier)));
 
   return true;
 }
