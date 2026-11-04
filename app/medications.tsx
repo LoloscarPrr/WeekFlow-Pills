@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Medication, ScheduleMode } from '@/src/domain/medication';
 import {
@@ -55,7 +55,7 @@ function prettyDate(dateKey: string) {
 }
 
 export default function MedicationsScreen() {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [archivedMedications, setArchivedMedications] = useState<Medication[]>([]);
   const [lastTaken, setLastTaken] = useState<Record<number, LastTaken>>({});
