@@ -23,6 +23,7 @@ let medications = [{
   scheduleMode: 'fixed', intervalHours: null, startTime: null,
 }];
 let nativeScheduled = [];
+let exactAlarmPermitted = true;
 let scheduleCalls = 0;
 let cancelCalls = 0;
 let failNextSchedule = false;
@@ -34,6 +35,8 @@ const notifications = {
   async setNotificationCategoryAsync() {},
   async setNotificationChannelAsync() {},
   async getPermissionsAsync() { return { granted: true, status: 'granted' }; },
+  async getExactAlarmPermissionsAsync() { return { granted: exactAlarmPermitted, status: exactAlarmPermitted ? 'granted' : 'denied' }; },
+  async requestExactAlarmPermissionsAsync() { exactAlarmPermitted = true; return { granted: true, status: 'granted' }; },
   async requestPermissionsAsync() { return { granted: true, status: 'granted' }; },
   async getAllScheduledNotificationsAsync() { return [...nativeScheduled]; },
   async cancelScheduledNotificationAsync(identifier) {
@@ -91,6 +94,8 @@ const managed = () => nativeScheduled.filter(r => r.content.data?.managedBy === 
   await api.syncMedicationNotifications();
   assert.equal(managed().length, 1, 'one daily dose is scheduled');
   assert.equal(managed()[0].trigger.type, 'daily');
+  assert.equal(managed()[0].trigger.delivery, 'alarmClock', 'daily medicine uses exact critical alarm mode');
+  assert.equal(managed()[0].content.data.exactAlarmEnabled, true, 'records real Android exact access');
   const baselineSchedule = scheduleCalls;
   const baselineCancel = cancelCalls;
   await api.syncMedicationNotifications();
@@ -132,6 +137,7 @@ const managed = () => nativeScheduled.filter(r => r.content.data?.managedBy === 
   assert.equal(managed().length, 1, 'weekly plan replaces daily reminder once');
   assert.equal(managed()[0].trigger.type, 'weekly');
   assert.equal(managed()[0].trigger.weekday, 3, 'Tuesday maps to Expo weekday 3');
+  assert.equal(managed()[0].trigger.delivery,'alarmClock','weekly medicine uses critical alarm delivery');
 
   const tomorrow = new Date();tomorrow.setDate(tomorrow.getDate()+1);
   const dateKey = domain.localDateKey(tomorrow);
@@ -139,9 +145,26 @@ const managed = () => nativeScheduled.filter(r => r.content.data?.managedBy === 
   await api.syncMedicationNotifications();
   assert.equal(managed().length, 1, 'bounded single date creates one dated reminder');
   assert.equal(managed()[0].trigger.type,'date');
+  assert.equal(managed()[0].trigger.delivery,'alarmClock','date-bounded medicine uses critical alarm delivery');
   const stableDated = managed()[0].identifier;
   await api.syncMedicationNotifications();
   assert.equal(managed()[0].identifier,stableDated,'bounded dated reminders are not constantly rebuilt');
+
+  exactAlarmPermitted = false;
+  await api.syncMedicationNotifications();
+  assert.equal(managed()[0].content.data.exactAlarmEnabled, false,
+    'revoked special permission re-arms a best-effort fallback and records reduced reliability');
+  exactAlarmPermitted = true;
+  await api.syncMedicationNotifications();
+  assert.equal(managed()[0].content.data.exactAlarmEnabled, true,
+    'granting special permission upgrades existing native alarm to precise delivery');
+  const at = await api.scheduleMedicationLongIdleTest(new Date());
+  assert.ok(at.getTime() > Date.now() + 23*60*60*1000, 'long idle diagnostic is 24 hours ahead');
+  const longTest = nativeScheduled.filter(r => r.content.data?.kind === 'long-idle-test');
+  assert.equal(longTest.length, 1, 'one 24-hour diagnostic alarm');
+  assert.equal(longTest[0].trigger.delivery, 'alarmClock', '24-hour test uses same precise date trigger');
+  assert.ok(nativeScheduled.every(r => r.content.data?.kind !== 'diagnostic-test' ||
+    r.trigger.delivery !== 'alarmClock'), 'five-second test never claims alarm-clock delivery');
 
   medications = [];
   await api.syncMedicationNotifications();

@@ -1,0 +1,66 @@
+name: WeekFlow Pills Android PR smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "src/**"
+      - "package.json"
+      - "app.json"
+      - ".github/workflows/pills-android-pr-smoke.yml"
+      - ".github/workflows/build-weekflow-pills.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  android-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.13'
+          package-manager-cache: false
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Quality gate
+        run: npm run quality
+      - name: Use official separated assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s WeekFlow-Pills-official-assets-v2.zip
+          unzip -o WeekFlow-Pills-official-assets-v2.zip -d assets
+          test -s assets/icon.png
+          test -s assets/adaptive-icon.png
+          test -s assets/adaptive-icon-background.png
+          test -s assets/splash.png
+      - name: Generate native Android SDK 58 project
+        run: npx expo prebuild --platform android --no-install --clean
+      - name: Assemble Android release (PR smoke; test signing only)
+        working-directory: android
+        env:
+          NODE_ENV: production
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+      - name: Verify real APK was produced
+        run: |
+          APK="$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          test -s "$APK"
+          ls -lh "$APK"

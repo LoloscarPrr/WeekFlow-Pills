@@ -68,7 +68,7 @@ function notificationKey(medicationId: number, scheduledTime: string, weekday?: 
 function medicationNotificationContent(
   medicationId: number,
   scheduledTime: string,
-  options?: { scheduledDate?: string; notificationKey?: string },
+  options?: { scheduledDate?: string; notificationKey?: string; exactAlarmEnabled?: boolean },
 ) {
   const medication = getMedicationById(medicationId);
   if (!medication) return null;
@@ -87,6 +87,7 @@ function medicationNotificationContent(
       kind,
       ...(scheduledDate ? { scheduledDate } : {}),
       ...(options?.notificationKey ? { notificationKey: options.notificationKey } : {}),
+      ...(kind !== 'snooze' ? { exactAlarmEnabled: options?.exactAlarmEnabled ?? false } : {}),
     },
   } satisfies Notifications.NotificationContentInput;
 }
@@ -109,6 +110,7 @@ async function keepOrReplaceReminder(
     request.content.title === content.title
     && request.content.body === content.body
     && request.content.data?.kind === content.data?.kind
+    && request.content.data?.exactAlarmEnabled === content.data?.exactAlarmEnabled
   );
   if (matching) {
     // Leave the functioning alarm in place; clear only duplicates.
@@ -148,6 +150,7 @@ async function performSync() {
 
   const now = new Date();
   const todayKey = localDateKey(now);
+  const exactAlarmEnabled = (await Notifications.getExactAlarmPermissionsAsync()).granted;
 
   for (const medication of listMedications(false)) {
     const times = resolveMedicationTimes(medication);
@@ -171,11 +174,13 @@ async function performSync() {
           const content = medicationNotificationContent(medication.id, time, {
             scheduledDate: dateKey,
             notificationKey: key,
+            exactAlarmEnabled,
           });
           if (!content) continue;
 
           await keepOrReplaceReminder(key, content, {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
+            delivery: 'alarmClock',
             date: when,
             channelId: CHANNEL_ID,
           }, existingByKey);
@@ -191,10 +196,11 @@ async function performSync() {
         const key = notificationKey(medication.id, time);
         if (desiredKeys.has(key)) continue;
         desiredKeys.add(key);
-        const content = medicationNotificationContent(medication.id, time, { notificationKey: key });
+        const content = medicationNotificationContent(medication.id, time, { notificationKey: key, exactAlarmEnabled });
         if (!content) continue;
         await keepOrReplaceReminder(key, content, {
           type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            delivery: 'alarmClock',
           hour,
           minute,
           channelId: CHANNEL_ID,
@@ -204,10 +210,11 @@ async function performSync() {
           const key = notificationKey(medication.id, time, day);
           if (desiredKeys.has(key)) continue;
           desiredKeys.add(key);
-          const content = medicationNotificationContent(medication.id, time, { notificationKey: key });
+          const content = medicationNotificationContent(medication.id, time, { notificationKey: key, exactAlarmEnabled });
           if (!content) continue;
           await keepOrReplaceReminder(key, content, {
             type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+            delivery: 'alarmClock',
             weekday: day + 1,
             hour,
             minute,
@@ -302,6 +309,7 @@ export async function handleMedicationNotificationResponse(response: Notificatio
 export type MedicationReminderDiagnostics = {
   permissionGranted: boolean;
   permissionStatus: Notifications.PermissionStatus;
+  exactAlarmGranted: boolean;
   totalManaged: number;
   recurring: number;
   dated: number;
@@ -310,16 +318,59 @@ export type MedicationReminderDiagnostics = {
 
 export async function getMedicationReminderDiagnostics(): Promise<MedicationReminderDiagnostics> {
   const permission = await Notifications.getPermissionsAsync();
+  const exactAlarm = await Notifications.getExactAlarmPermissionsAsync();
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   const managed = scheduled.filter((request) => request.content.data?.managedBy === MANAGED_BY);
   return {
     permissionGranted: permission.granted,
     permissionStatus: permission.status,
+    exactAlarmGranted: exactAlarm.granted,
     totalManaged: managed.length,
     recurring: managed.filter((request) => request.content.data?.kind === 'recurring').length,
     dated: managed.filter((request) => request.content.data?.kind === 'dated').length,
     snoozed: managed.filter((request) => request.content.data?.kind === 'snooze').length,
   };
+}
+
+/** The Android special access is never requested automatically during startup. */
+export async function requestMedicationExactAlarmPermission(): Promise<boolean> {
+  const status = await Notifications.requestExactAlarmPermissionsAsync();
+  if (status.granted) {
+    await syncMedicationNotifications();
+  }
+  return status.granted;
+}
+
+/** A same-mechanism test for long idle periods, separate from any medication. */
+export async function scheduleMedicationLongIdleTest(now = new Date()): Promise<Date> {
+  const permission = await Notifications.getPermissionsAsync();
+  const exact = await Notifications.getExactAlarmPermissionsAsync();
+  if (!permission.granted || !exact.granted) {
+    throw new Error('Activa notificaciones y alarmas exactas antes de probar la entrega tras 24 horas.');
+  }
+  const at = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const existing = await Notifications.getAllScheduledNotificationsAsync();
+  const oldTests = existing.filter(request =>
+    request.content.data?.managedBy === MANAGED_BY
+    && request.content.data?.kind === 'long-idle-test'
+  );
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Prueba de 24 horas · WeekFlow Pills',
+      body: 'Esta prueba usó el mismo modo de alarma que los recordatorios de medicamentos.',
+      sound: true,
+      data: { managedBy: MANAGED_BY, kind: 'long-idle-test' },
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: at,
+      delivery: 'alarmClock',
+      channelId: CHANNEL_ID,
+    },
+  });
+  // Schedule first: old diagnostic stays if Android rejects the replacement.
+  await Promise.all(oldTests.map(request => Notifications.cancelScheduledNotificationAsync(request.identifier)));
+  return at;
 }
 
 export async function scheduleNotificationDiagnosticTest(delaySeconds = 5) {
