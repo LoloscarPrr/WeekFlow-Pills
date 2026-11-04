@@ -33,6 +33,8 @@ import {
 import { exportBackupFile, pickAndRestoreBackup, resetAppToZero } from '@/src/services/backup';
 import {
   getMedicationReminderDiagnostics,
+  requestMedicationExactAlarmPermission,
+  scheduleMedicationLongIdleTest,
   scheduleNotificationDiagnosticTest,
   syncMedicationNotifications,
   type MedicationReminderDiagnostics,
@@ -419,6 +421,34 @@ export default function MedicationsScreen() {
     }
   };
 
+  const requestExactAlarm = async () => {
+    try {
+      setNotificationDiagnosticBusy(true);
+      const granted = await requestMedicationExactAlarmPermission();
+      setNotificationDiagnostics(await getMedicationReminderDiagnostics());
+      setMessage(granted
+        ? 'Alarmas exactas permitidas. Se revisaron los recordatorios de medicamentos.'
+        : 'Android sigue bloqueando las alarmas exactas. Las notificaciones pueden llegar tarde.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudieron actualizar los permisos de alarmas.');
+    } finally {
+      setNotificationDiagnosticBusy(false);
+    }
+  };
+
+  const testLongIdle = async () => {
+    try {
+      setNotificationDiagnosticBusy(true);
+      const at = await scheduleMedicationLongIdleTest();
+      setMessage(`Prueba para ${at.toLocaleString('es-CL')}. No abras Pills antes de esa hora si quieres comprobar el reposo prolongado. No modifica tus medicamentos.`);
+      setNotificationDiagnostics(await getMedicationReminderDiagnostics());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo programar la prueba de 24 horas.');
+    } finally {
+      setNotificationDiagnosticBusy(false);
+    }
+  };
+
   const restoreBackup = () => {
     Alert.alert(
       'Restaurar respaldo',
@@ -647,6 +677,12 @@ export default function MedicationsScreen() {
               </Text>
             </View>
             <View style={s.diagnosticRow}>
+              <Text style={s.diagnosticLabel}>Alarmas exactas Android</Text>
+              <Text style={notificationDiagnostics?.exactAlarmGranted ? s.diagnosticOk : s.diagnosticBad}>
+                {notificationDiagnostics ? (notificationDiagnostics.exactAlarmGranted ? 'Permitidas' : 'Sin permiso') : 'Revisando…'}
+              </Text>
+            </View>
+            <View style={s.diagnosticRow}>
               <Text style={s.diagnosticLabel}>Recordatorios programados</Text>
               <Text style={s.diagnosticValue}>{notificationDiagnostics?.totalManaged ?? '—'}</Text>
             </View>
@@ -664,6 +700,26 @@ export default function MedicationsScreen() {
               accessibilityState={{ disabled: notificationDiagnosticBusy }}
             >
               <Text style={s.diagnosticPrimaryText}>{notificationDiagnosticBusy ? 'Revisando…' : 'Probar notificación en 5 segundos'}</Text>
+            </Pressable>
+            {notificationDiagnostics && !notificationDiagnostics.exactAlarmGranted ? (
+              <Pressable
+                style={[s.diagnosticPrimary, notificationDiagnosticBusy && s.backupDisabled]}
+                disabled={notificationDiagnosticBusy}
+                onPress={() => void requestExactAlarm()}
+                accessibilityRole="button"
+                accessibilityLabel="Permitir alarmas exactas en Android"
+              >
+                <Text style={s.diagnosticPrimaryText}>Permitir alarmas exactas</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              style={[s.diagnosticSecondary, notificationDiagnosticBusy && s.backupDisabled]}
+              disabled={notificationDiagnosticBusy}
+              onPress={() => void testLongIdle()}
+              accessibilityRole="button"
+              accessibilityLabel="Probar recordatorio de medicamentos después de 24 horas"
+            >
+              <Text style={s.diagnosticSecondaryText}>Probar entrega después de 24 horas</Text>
             </Pressable>
             <View style={s.row}>
               <Pressable
@@ -683,7 +739,8 @@ export default function MedicationsScreen() {
                 <Text style={s.diagnosticSecondaryText}>Abrir ajustes</Text>
               </Pressable>
             </View>
-            <Text style={s.diagnosticHint}>Si no llega la prueba: activa Notificaciones y la categoría «Recordatorios de medicamentos». En Android 14+, revisa también Ajustes → Apps → Acceso especial → Alarmas y recordatorios → WeekFlow Pills. En Xiaomi/Redmi/POCO, selecciona batería «Sin restricciones» y permite inicio automático. Después vuelve y pulsa «Actualizar».</Text>
+            <Text style={s.diagnosticHint}>El aviso de 5 segundos solo comprueba una entrega inmediata. Las dosis ahora utilizan la modalidad de alarma crítica de Android cuando el permiso «Alarmas exactas» está concedido. Si la autorización falta, Android puede demorar los avisos.</Text>
+            <Text style={s.diagnosticHint}>En Motorola revisa batería «Permitir siempre» o «Sin restricciones» según la versión de Android. En otros teléfonos busca los ajustes equivalentes. La prueba de 24 horas permite comprobar si una alarma con fecha llega cuando Pills lleva tiempo sin abrirse.</Text>
             <Text style={s.diagnosticHint}>Comprueba también una dosis de prueba con la pantalla bloqueada. Que diga «programado» no confirma que Android la haya entregado. No dependas exclusivamente de esta app hasta verificarla.</Text>
           </View>
 
